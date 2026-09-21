@@ -96,7 +96,12 @@
                     <td class="px-4 py-3 text-slate-400">Parent folder</td>
                     <td class="px-4 py-3"></td>
                 `;
+                parentRow.dataset.path = parentPath;
+                parentRow.dataset.isDir = 'true';
                 parentRow.addEventListener('click', () => fetchDirectory(parentPath));
+                parentRow.addEventListener('dragover', handleDragOver);
+                parentRow.addEventListener('dragleave', handleDragLeave);
+                parentRow.addEventListener('drop', handleDrop);
                 tbody.appendChild(parentRow);
             }
 
