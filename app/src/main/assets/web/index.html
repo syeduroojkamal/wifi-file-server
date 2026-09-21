@@ -368,12 +368,12 @@
             else alert(await res.text() || 'Move failed');
         }
 
-        function uploadFile(file, progressElement, statusElement) {
+        function uploadFile(file, targetPath, progressElement, statusElement) {
             return new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 const formData = new FormData();
                 formData.append('file', file);
-                formData.append('path', currentPath);
+                formData.append('path', targetPath);
 
                 xhr.upload.addEventListener('progress', (event) => {
                     if (!event.lengthComputable) return;
@@ -400,11 +400,41 @@
         async function uploadFiles(files) {
             if (!files.length) return;
 
+            const targetPath = currentPath;
+            let existingNames;
+            try {
+                const response = await fetch(`/api/list?path=${encodeURIComponent(targetPath)}`);
+                if (!response.ok) throw new Error('Failed to check the destination folder');
+                const items = await response.json();
+                existingNames = new Set(items.filter((item) => !item.isDir).map((item) => item.name));
+            } catch (error) {
+                alert(error.message);
+                return;
+            }
+
+            const filesToUpload = [];
+            const confirmedNames = new Set();
+            const declinedNames = new Set();
+            for (const file of files) {
+                if (existingNames.has(file.name)) {
+                    if (declinedNames.has(file.name)) continue;
+                    if (!confirmedNames.has(file.name)) {
+                        if (!confirm(`"${file.name}" already exists. Overwrite it?`)) {
+                            declinedNames.add(file.name);
+                            continue;
+                        }
+                        confirmedNames.add(file.name);
+                    }
+                }
+                filesToUpload.push(file);
+            }
+            if (!filesToUpload.length) return;
+
             const progressList = document.getElementById('transfer-progress');
             const progressItems = document.getElementById('transfer-progress-list');
             progressList.classList.remove('hidden');
 
-            for (const file of files) {
+            for (const file of filesToUpload) {
                 const row = document.createElement('div');
                 row.className = 'bg-slate-800 border border-slate-700 rounded-lg p-3';
 
@@ -427,7 +457,7 @@
 
                 uploadQueue = uploadQueue.then(async () => {
                     try {
-                        await uploadFile(file, progress, status);
+                        await uploadFile(file, targetPath, progress, status);
                         await fetchDirectory(currentPath);
                     } catch (error) {
                         status.className = 'text-rose-400 shrink-0';
