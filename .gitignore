@@ -1,0 +1,16 @@
+# Build output and temporary files
+build/
+app/build/
+.gradle/
+
+# Local machine-specific configuration
+local.properties
+
+# IDE specific files (Android Studio / IntelliJ)
+.idea/
+*.iml
+.cxx/
+
+# OS specific files
+.DS_Store
+Thumbs.db
