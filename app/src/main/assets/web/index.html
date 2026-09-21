@@ -117,13 +117,13 @@
                     tr.innerHTML = `
                         <td class="px-4 py-3">📁 <a href="javascript:void(0)" onclick="fetchDirectory('${relPath}')" class="text-sky-400 hover:underline break-all font-medium">${item.name}</a></td>
                         <td class="px-4 py-3 text-slate-400">Folder</td>
-                        <td class="px-4 py-3 text-right"><button class="text-sky-400 hover:text-sky-300 text-lg mr-3 cursor-pointer" onclick="downloadFolder('${relPath}', '${item.name}')" aria-label="Download ${item.name} as ZIP" title="Download folder as ZIP">📦</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
+                        <td class="px-4 py-3 text-right"><button class="text-sky-400 hover:text-sky-300 text-lg mr-3 cursor-pointer" onclick="downloadFolder('${relPath}', '${item.name}')" aria-label="Download ${item.name} as ZIP" title="Download folder as ZIP">📦</button><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
                     `;
                 } else {
                     tr.innerHTML = `
                         <td class="px-4 py-3">📄 <a href="/api/download?path=${encodeURIComponent(relPath)}" download class="text-sky-400 hover:underline break-all">${item.name}</a></td>
                         <td class="px-4 py-3 text-slate-400">${formatBytes(item.size)}</td>
-                        <td class="px-4 py-3 text-right"><a href="/api/download?path=${encodeURIComponent(relPath)}" download aria-label="Download ${item.name}" title="Download" class="text-sky-400 hover:text-sky-300 text-lg mr-3">⬇️</a><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
+                        <td class="px-4 py-3 text-right"><a href="/api/download?path=${encodeURIComponent(relPath)}" download aria-label="Download ${item.name}" title="Download" class="text-sky-400 hover:text-sky-300 text-lg mr-3">⬇️</a><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
                     `;
                 }
                 tr.addEventListener('dragstart', handleDragStart);
@@ -241,6 +241,23 @@
             const res = await fetch(`/api/delete?path=${encodeURIComponent(path)}`, { method: 'POST' });
             if (res.ok) fetchDirectory(currentPath);
             else alert('Delete failed');
+        }
+
+        async function duplicateItem(path) {
+            const name = path.split('/').pop();
+            const duplicateName = name.includes('.')
+                ? `${name.slice(0, name.lastIndexOf('.'))}_copy${name.slice(name.lastIndexOf('.'))}`
+                : `${name}_copy`;
+
+            if (!confirm(`Duplicate "${name}" to "${duplicateName}"?`)) return;
+
+            const parentPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+            const res = await fetch(
+                `/api/duplicate?from=${encodeURIComponent(path)}&to=${encodeURIComponent(parentPath)}`,
+                { method: 'POST' }
+            );
+            if (res.ok) fetchDirectory(currentPath);
+            else alert(await res.text() || 'Duplicate failed');
         }
 
         async function moveItem(path) {

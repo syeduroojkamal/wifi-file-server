@@ -36,6 +36,7 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
                 uri == "/api/upload" && session.method == Method.POST -> handleUpload(session)
                 uri == "/api/create-folder" && session.method == Method.POST -> handleCreateFolder(session)
                 uri == "/api/delete" && session.method == Method.POST -> handleDelete(session)
+                uri == "/api/duplicate" && session.method == Method.POST -> handleDuplicate(session)
                 uri == "/api/move" && session.method == Method.POST -> handleMove(session)
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "404 Not Found")
             }
@@ -302,6 +303,36 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
         }
     }
 
+    private fun handleDuplicate(session: IHTTPSession): Response {
+        val sourcePath = session.parameters["from"]?.firstOrNull()
+            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing source path")
+        val destinationPath = session.parameters["to"]?.firstOrNull() ?: ""
+        val source = resolveSafeFile(sourcePath)
+        val destinationDir = if (destinationPath.isBlank()) rootDir else resolveSafeFile(destinationPath)
+
+        if (!source.exists()) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Source not found")
+        }
+        if (source.canonicalPath == rootDir.canonicalPath) {
+            return newFixedLengthResponse(Response.Status.FORBIDDEN, MIME_PLAINTEXT, "Cannot duplicate root directory")
+        }
+        if (!destinationDir.exists() || !destinationDir.isDirectory) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Destination folder not found")
+        }
+
+        val destination = File(destinationDir, generateUniqueDuplicateName(source.name, destinationDir)).canonicalFile
+        return try {
+            if (source.isDirectory) {
+                copyDirectory(source, destination)
+            } else {
+                copyFile(source, destination)
+            }
+            newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "Duplicated")
+        } catch (e: Exception) {
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, e.message ?: "Duplicate failed")
+        }
+    }
+
     private fun handleMove(session: IHTTPSession): Response {
         val sourcePath = session.parameters["from"]?.firstOrNull()
             ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing source path")
@@ -336,6 +367,42 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "Moved")
         } else {
             newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Move failed")
+        }
+    }
+
+    private fun generateUniqueDuplicateName(originalName: String, parentDir: File): String {
+        val dotIndex = originalName.lastIndexOf('.')
+        val stem = if (dotIndex > 0 && dotIndex < originalName.length - 1) originalName.substring(0, dotIndex) else originalName
+        val extension = if (dotIndex > 0 && dotIndex < originalName.length - 1) originalName.substring(dotIndex) else ""
+
+        var candidate = if (extension.isEmpty()) "${stem}_copy" else "${stem}_copy$extension"
+        var counter = 2
+
+        while (File(parentDir, candidate).exists()) {
+            candidate = if (extension.isEmpty()) "${stem}_copy_$counter" else "${stem}_copy_$counter$extension"
+            counter += 1
+        }
+
+        return candidate
+    }
+
+    private fun copyDirectory(source: File, destination: File) {
+        destination.mkdirs()
+        source.listFiles()?.forEach { child ->
+            val childDestination = File(destination, child.name)
+            if (child.isDirectory) {
+                copyDirectory(child, childDestination)
+            } else {
+                copyFile(child, childDestination)
+            }
+        }
+    }
+
+    private fun copyFile(source: File, destination: File) {
+        FileInputStream(source).use { input ->
+            FileOutputStream(destination).use { output ->
+                input.copyTo(output)
+            }
         }
     }
 
