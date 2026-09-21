@@ -87,10 +87,26 @@
                 return a.name.localeCompare(b.name); // then alphabetical
             });
 
+            if (path) {
+                const parentPath = path.split('/').slice(0, -1).join('/');
+                const parentRow = document.createElement('tr');
+                parentRow.className = 'hover:bg-slate-700/50 transition cursor-pointer';
+                parentRow.innerHTML = `
+                    <td class="px-4 py-3">..</td>
+                    <td class="px-4 py-3 text-slate-400">Parent folder</td>
+                    <td class="px-4 py-3"></td>
+                `;
+                parentRow.addEventListener('click', () => fetchDirectory(parentPath));
+                tbody.appendChild(parentRow);
+            }
+
             items.forEach(item => {
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-700/50 transition';
                 const relPath = path ? `${path}/${item.name}` : item.name;
+                tr.draggable = true;
+                tr.dataset.path = relPath;
+                tr.dataset.isDir = String(item.isDir);
 
                 if (item.isDir) {
                     tr.innerHTML = `
@@ -104,6 +120,13 @@
                         <td class="px-4 py-3 text-slate-400">${formatBytes(item.size)}</td>
                         <td class="px-4 py-3 text-right"><a href="/api/download?path=${encodeURIComponent(relPath)}" download aria-label="Download ${item.name}" title="Download" class="text-sky-400 hover:text-sky-300 text-lg mr-3">⬇️</a><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
                     `;
+                }
+                tr.addEventListener('dragstart', handleDragStart);
+                tr.addEventListener('dragend', clearDragState);
+                if (item.isDir) {
+                    tr.addEventListener('dragover', handleDragOver);
+                    tr.addEventListener('dragleave', handleDragLeave);
+                    tr.addEventListener('drop', handleDrop);
                 }
                 tbody.appendChild(tr);
             });
@@ -144,6 +167,54 @@
             const parts = currentPath.split('/');
             parts.pop();
             fetchDirectory(parts.join('/'));
+        }
+
+        let draggedPath = null;
+
+        function handleDragStart(event) {
+            draggedPath = event.currentTarget.dataset.path;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', draggedPath);
+            event.currentTarget.classList.add('opacity-50');
+        }
+
+        function clearDragState(event) {
+            draggedPath = null;
+            event.currentTarget.classList.remove('opacity-50');
+            document.querySelectorAll('[data-is-dir="true"]').forEach(row => {
+                row.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
+            });
+        }
+
+        function handleDragOver(event) {
+            if (!draggedPath || draggedPath === event.currentTarget.dataset.path) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            event.currentTarget.classList.add('ring-2', 'ring-sky-400', 'bg-slate-700');
+        }
+
+        function handleDragLeave(event) {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+                event.currentTarget.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
+            }
+        }
+
+        async function handleDrop(event) {
+            event.preventDefault();
+            const destination = event.currentTarget.dataset.path;
+            event.currentTarget.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
+            if (!draggedPath || draggedPath === destination) return;
+
+            const res = await fetch(
+                `/api/move?from=${encodeURIComponent(draggedPath)}&to=${encodeURIComponent(destination)}`,
+                { method: 'POST' }
+            );
+            if (res.ok) {
+                fetchDirectory(currentPath);
+            } else {
+                alert(await res.text() || 'Move failed');
+            }
+            draggedPath = null;
         }
 
         function downloadFolder(path, name) {
