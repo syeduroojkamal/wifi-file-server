@@ -1,0 +1,6 @@
+R_DEF: Internal format may change without notice
+local
+id btnToggleServer
+id textAddress
+id textHint
+layout activity_main

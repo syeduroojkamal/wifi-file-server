@@ -1,0 +1,355 @@
+package org.foss.wififileserver
+
+import android.content.Context
+import android.os.Environment
+import fi.iki.elonen.NanoHTTPD
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.FilterInputStream
+import java.io.InputStream
+import java.net.URLDecoder
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+
+class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(port) {
+
+    private val rootDir: File = Environment.getExternalStorageDirectory()
+    private val zipExecutor = Executors.newCachedThreadPool()
+    private val zipJobs = ConcurrentHashMap<String, ZipJob>()
+
+    override fun serve(session: IHTTPSession): Response {
+        val uri = session.uri
+
+        return try {
+            when {
+                uri == "/" || uri == "/index.html" -> serveAsset("web/index.html", "text/html")
+                uri == "/api/list" -> handleList(session)
+                uri == "/api/download" -> handleDownload(session)
+                uri == "/api/zip" && session.method == Method.POST -> handleStartZip(session)
+                uri == "/api/zip-progress" -> handleZipProgress(session)
+                uri == "/api/upload" && session.method == Method.POST -> handleUpload(session)
+                uri == "/api/create-folder" && session.method == Method.POST -> handleCreateFolder(session)
+                uri == "/api/delete" && session.method == Method.POST -> handleDelete(session)
+                uri == "/api/move" && session.method == Method.POST -> handleMove(session)
+                else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "404 Not Found")
+            }
+        } catch (e: Exception) {
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Error: ${e.message}")
+        }
+    }
+
+    private fun resolveSafeFile(subPath: String?): File {
+        val cleanSubPath = if (subPath.isNullOrBlank()) "" else URLDecoder.decode(subPath, "UTF-8")
+        val target = File(rootDir, cleanSubPath).canonicalFile
+        if (!target.path.startsWith(rootDir.canonicalPath)) {
+            throw SecurityException("Access denied: Path outside root boundary.")
+        }
+        return target
+    }
+
+    private fun serveAsset(assetPath: String, mime: String): Response {
+        val stream: InputStream = context.assets.open(assetPath)
+        return newChunkedResponse(Response.Status.OK, mime, stream)
+    }
+
+    private fun handleList(session: IHTTPSession): Response {
+        val pathParam = session.parameters["path"]?.firstOrNull() ?: ""
+        val targetDir = resolveSafeFile(pathParam)
+
+        if (!targetDir.exists() || !targetDir.isDirectory) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Folder not found")
+        }
+
+        val array = JSONArray()
+        targetDir.listFiles()?.forEach { file ->
+            val obj = JSONObject()
+            obj.put("name", file.name)
+            obj.put("isDir", file.isDirectory)
+            obj.put("size", if (file.isDirectory) 0 else file.length())
+            array.put(obj)
+        }
+
+        val res = newFixedLengthResponse(Response.Status.OK, "application/json", array.toString())
+        res.addHeader("Access-Control-Allow-Origin", "*")
+        return res
+    }
+
+    private fun handleDownload(session: IHTTPSession): Response {
+        val jobId = session.parameters["job"]?.firstOrNull()
+        if (jobId != null) {
+            val job = zipJobs[jobId]
+                ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "ZIP job not found")
+            val zipFile = job.zipFile
+                ?: return newFixedLengthResponse(Response.Status.CONFLICT, MIME_PLAINTEXT, "ZIP is not ready")
+            if (!zipFile.exists()) {
+                zipJobs.remove(jobId)
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "ZIP file not found")
+            }
+
+            val stream = object : FilterInputStream(FileInputStream(zipFile)) {
+                override fun close() {
+                    try {
+                        super.close()
+                    } finally {
+                        zipFile.delete()
+                        zipJobs.remove(jobId)
+                    }
+                }
+            }
+            val res = newFixedLengthResponse(Response.Status.OK, "application/zip", stream, zipFile.length())
+            res.addHeader("Content-Disposition", "attachment; filename=\"${job.name}.zip\"")
+            return res
+        }
+
+        val pathParam = session.parameters["path"]?.firstOrNull() ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing path")
+        val file = resolveSafeFile(pathParam)
+
+        if (!file.exists()) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "File not found")
+        }
+
+        if (file.isDirectory) {
+            val zipFile = File.createTempFile("download-", ".zip", context.cacheDir)
+            try {
+                createZip(file, zipFile)
+            } catch (e: Exception) {
+                zipFile.delete()
+                throw e
+            }
+            val stream = object : FilterInputStream(FileInputStream(zipFile)) {
+                override fun close() {
+                    try {
+                        super.close()
+                    } finally {
+                        zipFile.delete()
+                    }
+                }
+            }
+            val res = newFixedLengthResponse(Response.Status.OK, "application/zip", stream, zipFile.length())
+            res.addHeader("Content-Disposition", "attachment; filename=\"${file.name}.zip\"")
+            return res
+        }
+
+        val mime = getMimeType(file.name)
+        val stream = FileInputStream(file)
+        val res = newFixedLengthResponse(Response.Status.OK, mime, stream, file.length())
+        res.addHeader("Content-Disposition", "attachment; filename=\"${file.name}\"")
+        return res
+    }
+
+    private fun createZip(sourceDir: File, zipFile: File) {
+        ZipOutputStream(FileOutputStream(zipFile)).use { output ->
+            addToZip(sourceDir, sourceDir.name, output)
+        }
+    }
+
+    private fun addToZip(file: File, entryPath: String, output: ZipOutputStream) {
+        if (file.isDirectory) {
+            output.putNextEntry(ZipEntry("$entryPath/"))
+            output.closeEntry()
+            file.listFiles()?.forEach { child ->
+                addToZip(child, "$entryPath/${child.name}", output)
+            }
+        } else {
+            output.putNextEntry(ZipEntry(entryPath))
+            FileInputStream(file).use { input -> input.copyTo(output) }
+            output.closeEntry()
+        }
+    }
+
+    private fun handleStartZip(session: IHTTPSession): Response {
+        val pathParam = session.parameters["path"]?.firstOrNull()
+            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing path")
+        val sourceDir = resolveSafeFile(pathParam)
+        if (!sourceDir.exists() || !sourceDir.isDirectory) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Folder not found")
+        }
+
+        val jobId = UUID.randomUUID().toString()
+        val job = ZipJob(jobId, sourceDir.name, calculateTotalBytes(sourceDir))
+        zipJobs[jobId] = job
+        zipExecutor.execute {
+            val zipFile = File.createTempFile("download-", ".zip", context.cacheDir)
+            try {
+                createZip(sourceDir, zipFile, job)
+                job.zipFile = zipFile
+                job.state = "complete"
+            } catch (e: Exception) {
+                zipFile.delete()
+                job.error = e.message ?: "ZIP creation failed"
+                job.state = "failed"
+            }
+        }
+
+        val result = JSONObject().put("jobId", jobId)
+        return newFixedLengthResponse(Response.Status.OK, "application/json", result.toString())
+    }
+
+    private fun handleZipProgress(session: IHTTPSession): Response {
+        val jobId = session.parameters["job"]?.firstOrNull()
+            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing job")
+        val job = zipJobs[jobId]
+            ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "ZIP job not found")
+        val result = JSONObject()
+            .put("state", job.state)
+            .put("progress", job.progress)
+            .put("processedBytes", job.processedBytes)
+            .put("totalBytes", job.totalBytes)
+        job.error?.let { result.put("error", it) }
+        return newFixedLengthResponse(Response.Status.OK, "application/json", result.toString())
+    }
+
+    private fun createZip(sourceDir: File, zipFile: File, job: ZipJob) {
+        ZipOutputStream(FileOutputStream(zipFile)).use { output ->
+            addToZip(sourceDir, sourceDir.name, output, job)
+        }
+    }
+
+    private fun addToZip(file: File, entryPath: String, output: ZipOutputStream, job: ZipJob) {
+        if (file.isDirectory) {
+            output.putNextEntry(ZipEntry("$entryPath/"))
+            output.closeEntry()
+            file.listFiles()?.forEach { child ->
+                addToZip(child, "$entryPath/${child.name}", output, job)
+            }
+        } else {
+            output.putNextEntry(ZipEntry(entryPath))
+            FileInputStream(file).use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var count = input.read(buffer)
+                while (count != -1) {
+                    output.write(buffer, 0, count)
+                    job.processedBytes += count
+                    job.progress = if (job.totalBytes == 0L) 100 else
+                        ((job.processedBytes * 100) / job.totalBytes).toInt().coerceAtMost(99)
+                    count = input.read(buffer)
+                }
+            }
+            output.closeEntry()
+        }
+    }
+
+    private fun calculateTotalBytes(file: File): Long {
+        if (file.isFile) return file.length()
+        return file.listFiles()?.sumOf { calculateTotalBytes(it) } ?: 0L
+    }
+
+    private class ZipJob(
+        val id: String,
+        val name: String,
+        val totalBytes: Long,
+        @Volatile var state: String = "compressing",
+        @Volatile var processedBytes: Long = 0,
+        @Volatile var progress: Int = 0,
+        @Volatile var zipFile: File? = null,
+        @Volatile var error: String? = null
+    )
+
+    private fun handleUpload(session: IHTTPSession): Response {
+        val files = HashMap<String, String>()
+        session.parseBody(files)
+
+        val params = session.parameters
+        val targetPath = params["path"]?.firstOrNull() ?: ""
+        val destDir = resolveSafeFile(targetPath)
+
+        files.forEach { (formField, tempFilePath) ->
+            if (formField != "path") {
+                val originalName = params[formField]?.firstOrNull() ?: "upload_${System.currentTimeMillis()}"
+                val tempFile = File(tempFilePath)
+                val targetFile = File(destDir, originalName)
+
+                FileInputStream(tempFile).use { input ->
+                    FileOutputStream(targetFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                tempFile.delete()
+            }
+        }
+        return newFixedLengthResponse(Response.Status.OK, "text/plain", "Upload successful")
+    }
+
+    private fun handleCreateFolder(session: IHTTPSession): Response {
+        val pathParam = session.parameters["path"]?.firstOrNull() ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing folder path")
+        val folder = resolveSafeFile(pathParam)
+        val created = folder.mkdirs() || folder.exists()
+        return if (created) {
+            newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "Created")
+        } else {
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Could not create folder")
+        }
+    }
+
+    private fun handleDelete(session: IHTTPSession): Response {
+        val pathParam = session.parameters["path"]?.firstOrNull() ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing path")
+        val target = resolveSafeFile(pathParam)
+        if (target.canonicalPath == rootDir.canonicalPath) {
+            return newFixedLengthResponse(Response.Status.FORBIDDEN, MIME_PLAINTEXT, "Cannot delete root directory")
+        }
+
+        val deleted = if (target.isDirectory) target.deleteRecursively() else target.delete()
+        return if (deleted) {
+            newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "Deleted")
+        } else {
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Delete failed")
+        }
+    }
+
+    private fun handleMove(session: IHTTPSession): Response {
+        val sourcePath = session.parameters["from"]?.firstOrNull()
+            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing source path")
+        val destinationPath = session.parameters["to"]?.firstOrNull() ?: ""
+        val source = resolveSafeFile(sourcePath)
+        val destinationDir = resolveSafeFile(destinationPath)
+
+        if (!source.exists()) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Source not found")
+        }
+        if (source.canonicalPath == rootDir.canonicalPath) {
+            return newFixedLengthResponse(Response.Status.FORBIDDEN, MIME_PLAINTEXT, "Cannot move root directory")
+        }
+        if (!destinationDir.isDirectory) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Destination folder not found")
+        }
+
+        val destination = File(destinationDir, source.name).canonicalFile
+        if (destination.path == source.canonicalPath) {
+            return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Source is already in that folder")
+        }
+        if (source.isDirectory &&
+            destinationDir.canonicalPath.startsWith(source.canonicalPath + File.separator)
+        ) {
+            return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Cannot move a folder into itself")
+        }
+        if (destination.exists()) {
+            return newFixedLengthResponse(Response.Status.CONFLICT, MIME_PLAINTEXT, "An item with that name already exists")
+        }
+
+        return if (source.renameTo(destination)) {
+            newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "Moved")
+        } else {
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Move failed")
+        }
+    }
+
+    private fun getMimeType(name: String): String {
+        return when (name.substringAfterLast('.', "").lowercase()) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "pdf" -> "application/pdf"
+            "mp4" -> "video/mp4"
+            "mp3" -> "audio/mpeg"
+            "zip" -> "application/zip"
+            "txt" -> "text/plain"
+            else -> "application/octet-stream"
+        }
+    }
+}
