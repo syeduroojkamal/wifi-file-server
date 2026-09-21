@@ -138,10 +138,91 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
         }
 
         val mime = getMimeType(file.name)
-        val stream = FileInputStream(file)
-        val res = newFixedLengthResponse(Response.Status.OK, mime, stream, file.length())
-        res.addHeader("Content-Disposition", "attachment; filename=\"${file.name}\"")
+        val rangeHeader = session.headers["range"] ?: session.headers["Range"]
+        val range = parseRange(rangeHeader, file.length())
+        if (rangeHeader != null && range == null) {
+            val res = newFixedLengthResponse(Response.Status.RANGE_NOT_SATISFIABLE, mime, "")
+            res.addHeader("Content-Range", "bytes */${file.length()}")
+            return res
+        }
+
+        val inline = session.parameters["inline"]?.firstOrNull() == "true"
+        val disposition = if (inline) "inline" else "attachment"
+        val start = range?.first ?: 0L
+        val length = range?.let { it.last - it.first + 1 } ?: file.length()
+        val stream = FileInputStream(file).apply {
+            if (start > 0) skipFully(this, start)
+        }
+        val responseStatus = if (range != null) Response.Status.PARTIAL_CONTENT else Response.Status.OK
+        val res = newFixedLengthResponse(responseStatus, mime, LimitedInputStream(stream, length), length)
+        res.addHeader("Accept-Ranges", "bytes")
+        res.addHeader("Content-Disposition", "$disposition; filename=\"${file.name}\"")
+        if (range != null) {
+            res.addHeader("Content-Range", "bytes ${range.first}-${range.last}/${file.length()}")
+        }
         return res
+    }
+
+    private fun parseRange(header: String?, fileLength: Long): LongRange? {
+        if (header == null) return null
+        if (!header.startsWith("bytes=") || fileLength <= 0) return null
+
+        val value = header.removePrefix("bytes=").split(",").first().trim()
+        val dash = value.indexOf('-')
+        if (dash < 0) return null
+
+        val startText = value.substring(0, dash).trim()
+        val endText = value.substring(dash + 1).trim()
+        val start: Long
+        val end: Long
+        try {
+            if (startText.isEmpty()) {
+                val suffixLength = endText.toLong()
+                if (suffixLength <= 0) return null
+                start = (fileLength - suffixLength).coerceAtLeast(0)
+                end = fileLength - 1
+            } else {
+                start = startText.toLong()
+                end = if (endText.isEmpty()) fileLength - 1 else endText.toLong()
+            }
+        } catch (_: NumberFormatException) {
+            return null
+        }
+
+        if (start < 0 || start >= fileLength || end < start) return null
+        return start..end.coerceAtMost(fileLength - 1)
+    }
+
+    private fun skipFully(stream: InputStream, bytes: Long) {
+        var remaining = bytes
+        while (remaining > 0) {
+            val skipped = stream.skip(remaining)
+            if (skipped <= 0) {
+                if (stream.read() == -1) throw java.io.EOFException("Could not seek to requested range")
+                remaining--
+            } else {
+                remaining -= skipped
+            }
+        }
+    }
+
+    private class LimitedInputStream(
+        input: InputStream,
+        private var remaining: Long
+    ) : FilterInputStream(input) {
+        override fun read(): Int {
+            if (remaining <= 0) return -1
+            val value = super.read()
+            if (value >= 0) remaining--
+            return value
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (remaining <= 0) return -1
+            val count = super.read(buffer, offset, minOf(length.toLong(), remaining).toInt())
+            if (count > 0) remaining -= count
+            return count
+        }
     }
 
     private fun createZip(sourceDir: File, zipFile: File) {
@@ -411,9 +492,19 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             "jpg", "jpeg" -> "image/jpeg"
             "png" -> "image/png"
             "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "bmp" -> "image/bmp"
+            "svg" -> "image/svg+xml"
             "pdf" -> "application/pdf"
             "mp4" -> "video/mp4"
+            "webm" -> "video/webm"
+            "ogv" -> "video/ogg"
             "mp3" -> "audio/mpeg"
+            "wav" -> "audio/wav"
+            "ogg" -> "audio/ogg"
+            "m4a" -> "audio/mp4"
+            "aac" -> "audio/aac"
+            "flac" -> "audio/flac"
             "zip" -> "application/zip"
             "txt" -> "text/plain"
             else -> "application/octet-stream"

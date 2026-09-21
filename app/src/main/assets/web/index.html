@@ -63,6 +63,22 @@
         </div>
     </div>
 
+    <div id="preview-overlay" class="hidden fixed inset-0 z-50 bg-slate-950 p-4 sm:p-8">
+        <div class="h-full max-w-6xl mx-auto flex flex-col">
+            <div class="flex items-center justify-between gap-4 mb-4">
+                <h2 id="preview-title" class="font-semibold truncate"></h2>
+                <div class="flex items-center gap-3 shrink-0">
+                    <a id="preview-download" download
+                       class="text-sky-400 hover:text-sky-300 text-sm">Download</a>
+                    <button type="button" onclick="closePreview()"
+                            class="text-5xl leading-none text-slate-300 hover:text-white p-2 -m-2"
+                            aria-label="Close preview">×</button>
+                </div>
+            </div>
+            <div id="preview-content" class="min-h-0 flex-1 flex items-center justify-center"></div>
+        </div>
+    </div>
+
     <script>
         let currentPath = '';
         let uploadQueue = Promise.resolve();
@@ -120,8 +136,12 @@
                         <td class="px-4 py-3 text-right"><button class="text-sky-400 hover:text-sky-300 text-lg mr-3 cursor-pointer" onclick="downloadFolder('${relPath}', '${item.name}')" aria-label="Download ${item.name} as ZIP" title="Download folder as ZIP">📦</button><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
                     `;
                 } else {
+                    const previewable = isPreviewable(item.name);
+                    const fileName = previewable
+                        ? `<a href="#" onclick="event.preventDefault(); previewFile('${encodeURIComponent(relPath)}', '${encodeURIComponent(item.name)}')" class="text-sky-400 hover:underline break-all">${item.name}</a>`
+                        : `<span class="text-slate-100 break-all">${item.name}</span>`;
                     tr.innerHTML = `
-                        <td class="px-4 py-3">📄 <a href="/api/download?path=${encodeURIComponent(relPath)}" download class="text-sky-400 hover:underline break-all">${item.name}</a></td>
+                        <td class="px-4 py-3">📄 ${fileName}</td>
                         <td class="px-4 py-3 text-slate-400">${formatBytes(item.size)}</td>
                         <td class="px-4 py-3 text-right"><a href="/api/download?path=${encodeURIComponent(relPath)}" download aria-label="Download ${item.name}" title="Download" class="text-sky-400 hover:text-sky-300 text-lg mr-3">⬇️</a><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
                     `;
@@ -166,6 +186,82 @@
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
+
+        function isPreviewable(name) {
+            return /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|ogv|mp3|wav|ogg|m4a|aac|flac)$/i.test(name);
+        }
+
+        function previewFile(encodedPath, encodedName) {
+            const path = decodeURIComponent(encodedPath);
+            const name = decodeURIComponent(encodedName);
+            const url = `/api/download?path=${encodeURIComponent(path)}&inline=true`;
+            const extension = name.split('.').pop().toLowerCase();
+            const content = document.getElementById('preview-content');
+            content.replaceChildren();
+
+            if (/^(jpg|jpeg|png|gif|webp|bmp|svg)$/.test(extension)) {
+                const image = document.createElement('img');
+                image.src = url;
+                image.alt = name;
+                image.className = 'max-w-full max-h-full object-contain';
+                content.appendChild(image);
+            } else if (/^(mp4|webm|ogv)$/.test(extension)) {
+                const video = document.createElement('video');
+                video.src = url;
+                video.controls = true;
+                video.autoplay = true;
+                video.tabIndex = 0;
+                video.className = 'max-w-full max-h-full';
+                video.addEventListener('keydown', handleMediaKeydown);
+                content.appendChild(video);
+                video.focus();
+            } else {
+                const audio = document.createElement('audio');
+                audio.src = url;
+                audio.controls = true;
+                audio.autoplay = true;
+                audio.tabIndex = 0;
+                audio.className = 'w-full max-w-xl';
+                audio.addEventListener('keydown', handleMediaKeydown);
+                content.appendChild(audio);
+                audio.focus();
+            }
+
+            document.getElementById('preview-title').textContent = name;
+            document.getElementById('preview-download').href = `/api/download?path=${encodeURIComponent(path)}`;
+            document.getElementById('preview-overlay').classList.remove('hidden');
+        }
+
+        function handleMediaKeydown(event) {
+            const media = event.currentTarget;
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                event.preventDefault();
+                const direction = event.key === 'ArrowLeft' ? -1 : 1;
+                media.currentTime = Math.max(
+                    0,
+                    Math.min(media.duration || Infinity, media.currentTime + direction * 5)
+                );
+            } else if (event.key === ' ') {
+                event.preventDefault();
+                if (media.paused) media.play();
+                else media.pause();
+            }
+        }
+
+        function closePreview() {
+            const content = document.getElementById('preview-content');
+            content.querySelectorAll('video, audio').forEach((media) => {
+                media.pause();
+                media.removeAttribute('src');
+                media.load();
+            });
+            content.replaceChildren();
+            document.getElementById('preview-overlay').classList.add('hidden');
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closePreview();
+        });
 
         function navigateUp() {
             if (!currentPath) return;
