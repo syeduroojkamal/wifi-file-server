@@ -30,10 +30,10 @@ Ordered from most urgent to least urgent.
   - Limit individual uploads, total upload size, ZIP source size, file count, concurrent jobs, and storage consumption.
   - Check available disk space before writing.
 
-- [ ] **Bound and clean up ZIP jobs**
+- [x] **Bound and clean up ZIP jobs**
   - Replace the cached thread pool with a bounded executor.
   - Expire abandoned jobs, support cancellation, delete temporary files, and shut down the executor with the server.
-  - Status: partially implemented; still needs explicit cancellation/abandonment semantics and full lifecycle cleanup.
+  - Status: implemented; completed jobs are retained long enough for the progress poll and download flow to finish.
 
 <!--- [ ] **Avoid exposing raw exception messages**
   - Log detailed errors locally and return generic client-safe error messages from the HTTP server.-->
