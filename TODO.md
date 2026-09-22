@@ -40,9 +40,10 @@ Ordered from most urgent to least urgent.
 
 ## High priority: Android reliability and release hardening
 
-- [ ] **Fix server startup state handling**
+- [x] **Fix server startup state handling**
   - Do not switch the UI to “Stop Server” until the foreground service confirms that the server actually started.
   - Show bind/startup failures to the user.
+  - Status: implemented; the service broadcasts confirmed startup or failure, and the activity updates the controls accordingly.
 
 - [ ] **Replace silently swallowed exceptions**
   - Handle network and permission failures explicitly.

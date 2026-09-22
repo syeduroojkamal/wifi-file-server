@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class ServerService : Service() {
@@ -28,7 +29,13 @@ class ServerService : Service() {
                 server?.start()
                 val notification = buildNotification("Running on port $port")
                 startForeground(NOTIFICATION_ID, notification)
+                sendStatus(BROADCAST_SERVER_STARTED)
             } catch (e: Exception) {
+                Log.e(TAG, "Unable to start file server", e)
+                sendStatus(
+                    BROADCAST_SERVER_FAILED,
+                    e.message ?: "Unable to start the server"
+                )
                 stopSelf()
             }
         }
@@ -73,8 +80,20 @@ class ServerService : Service() {
             .build()
     }
 
+    private fun sendStatus(action: String, errorMessage: String? = null) {
+        val intent = Intent(action).setPackage(packageName)
+        if (errorMessage != null) {
+            intent.putExtra(EXTRA_ERROR_MESSAGE, errorMessage)
+        }
+        sendBroadcast(intent)
+    }
+
     companion object {
+        private const val TAG = "ServerService"
         const val CHANNEL_ID = "file_server_channel"
         const val NOTIFICATION_ID = 101
+        const val BROADCAST_SERVER_STARTED = "org.foss.wififileserver.SERVER_STARTED"
+        const val BROADCAST_SERVER_FAILED = "org.foss.wififileserver.SERVER_FAILED"
+        const val EXTRA_ERROR_MESSAGE = "ERROR_MESSAGE"
     }
 }

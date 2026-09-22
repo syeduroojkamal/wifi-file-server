@@ -1,10 +1,12 @@
 package org.foss.wififileserver
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -26,11 +28,41 @@ import java.net.NetworkInterface
 class MainActivity : AppCompatActivity() {
 
     private var isRunning = false
+    private var isStarting = false
+    private var pendingAddress: String? = null
     private val port = 8080
 
     private lateinit var textAddress: TextView
     private lateinit var textHint: TextView
     private lateinit var btnToggle: Button
+
+    private val serverStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                ServerService.BROADCAST_SERVER_STARTED -> {
+                    isStarting = false
+                    isRunning = true
+                    btnToggle.isEnabled = true
+                    textAddress.text = pendingAddress
+                    pendingAddress = null
+                    textHint.visibility = View.VISIBLE
+                    btnToggle.text = "Stop Server"
+                }
+                ServerService.BROADCAST_SERVER_FAILED -> {
+                    isStarting = false
+                    isRunning = false
+                    pendingAddress = null
+                    btnToggle.isEnabled = true
+                    textAddress.text = "Connect to Wi-Fi to start"
+                    textHint.visibility = View.GONE
+                    btnToggle.text = "Start Server"
+                    val message = intent.getStringExtra(ServerService.EXTRA_ERROR_MESSAGE)
+                        ?: "Unable to start the server"
+                    Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +71,15 @@ class MainActivity : AppCompatActivity() {
         textAddress = findViewById(R.id.textAddress)
         textHint = findViewById(R.id.textHint)
         btnToggle = findViewById(R.id.btnToggleServer)
+        ContextCompat.registerReceiver(
+            this,
+            serverStatusReceiver,
+            IntentFilter().apply {
+                addAction(ServerService.BROADCAST_SERVER_STARTED)
+                addAction(ServerService.BROADCAST_SERVER_FAILED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         textAddress.setOnClickListener {
             if (isRunning) {
@@ -49,7 +90,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggle.setOnClickListener {
-            if (isRunning) {
+            if (isStarting) {
+                return@setOnClickListener
+            } else if (isRunning) {
                 stopServer()
             } else {
                 if (hasStoragePermission()) {
@@ -78,20 +121,29 @@ class MainActivity : AppCompatActivity() {
             startService(serviceIntent)
         }
 
-        isRunning = true
-        textAddress.text = "http://$ip:$port 📋"
-        textHint.visibility = View.VISIBLE
-        btnToggle.text = "Stop Server"
+        isStarting = true
+        btnToggle.isEnabled = false
+        pendingAddress = "http://$ip:$port 📋"
+        textAddress.text = "Starting server..."
+        textHint.visibility = View.GONE
+        btnToggle.text = "Start Server"
     }
 
     private fun stopServer() {
         val serviceIntent = Intent(this, ServerService::class.java)
         stopService(serviceIntent)
 
+        isStarting = false
         isRunning = false
+        btnToggle.isEnabled = true
         textAddress.text = "Connect to Wi-Fi to start"
         textHint.visibility = View.GONE
         btnToggle.text = "Start Server"
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(serverStatusReceiver)
+        super.onDestroy()
     }
 
     private fun hasStoragePermission(): Boolean {
