@@ -14,13 +14,13 @@ Ordered from most urgent to least urgent.
 - [ ] **Restrict the shared directory**
   - Replace whole-device external storage access with Android’s Storage Access Framework or a user-selected directory.-->
 
-- [ ] **Fix path traversal validation**
-  - Replace the plain string-prefix check in `FileServer.resolveSafeFile()` with a canonical path-boundary check that also handles symlinks safely.
+- [x] **Fix path traversal validation**
+  - Replaced the plain string-prefix check in `FileServer.resolveSafeFile()` with a canonical path-boundary check that also handles symlinks safely.
 
-<!--- [ ] **Sanitize upload filenames on the server**
+- [x] **Sanitize upload filenames on the server**
   - Reject path separators and traversal components.
   - Validate the destination after resolving it.
-  - Enforce overwrite, rename, or conflict behavior server-side.-->
+  - Enforce overwrite, rename, or conflict behavior server-side.
 
 <!--- [ ] **Prevent filename-based HTML/JavaScript injection**
   - Stop inserting file and folder names into `innerHTML` and inline `onclick` handlers.
@@ -33,6 +33,7 @@ Ordered from most urgent to least urgent.
 - [ ] **Bound and clean up ZIP jobs**
   - Replace the cached thread pool with a bounded executor.
   - Expire abandoned jobs, support cancellation, delete temporary files, and shut down the executor with the server.
+  - Status: partially implemented; still needs explicit cancellation/abandonment semantics and full lifecycle cleanup.
 
 <!--- [ ] **Avoid exposing raw exception messages**
   - Log detailed errors locally and return generic client-safe error messages from the HTTP server.-->
