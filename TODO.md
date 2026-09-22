@@ -1,6 +1,17 @@
 # Production Readiness TODO
 
-Ordered from most urgent to least urgent.
+## Note to self
+
+- ./generate-tailwind.sh
+- ./gradlew assembleRelease
+- version update in app/build.gradle
+- update CHANGELOG.md
+- commit changes
+- push to github
+- trigger app build by tagging
+  - git tag -a v1.0.1 -m "Release v1.0.1"
+  - git push origin v1.0.1
+
 
 ## Critical: security and production blockers
 
