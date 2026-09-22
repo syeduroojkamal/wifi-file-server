@@ -49,12 +49,44 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
         val cleanSubPath = if (subPath.isNullOrBlank()) "" else URLDecoder.decode(subPath, "UTF-8")
         val root = rootDir.canonicalFile
         val target = File(root, cleanSubPath).canonicalFile
-        val rootPath = root.absolutePath
-        val targetPath = target.absolutePath
-        if (target != root && !targetPath.startsWith(rootPath + File.separator)) {
+        if (!isWithinRoot(target)) {
             throw SecurityException("Access denied: Path outside root boundary.")
         }
         return target
+    }
+
+    private fun isWithinRoot(file: File): Boolean {
+        val root = rootDir.canonicalFile
+        val target = file.canonicalFile
+        val rootPath = root.absolutePath
+        val targetPath = target.absolutePath
+        return target == root || targetPath.startsWith(rootPath + File.separator)
+    }
+
+    private fun resolveSafeDestinationFile(baseDir: File, fileName: String): File {
+        val safeName = sanitizeFileName(fileName)
+        val target = File(baseDir.canonicalFile, safeName).canonicalFile
+        if (!isWithinRoot(target)) {
+            throw SecurityException("Access denied: Path outside root boundary.")
+        }
+        return target
+    }
+
+    private fun sanitizeFileName(fileName: String?): String {
+        val rawName = fileName ?: throw IllegalArgumentException("Missing file name")
+        if (rawName.isBlank()) throw IllegalArgumentException("File name is required")
+        if (rawName == "." || rawName == "..") throw IllegalArgumentException("Invalid file name")
+        if (rawName.contains('/') || rawName.contains('\\') || rawName.contains('\u0000')) {
+            throw IllegalArgumentException("Invalid file name")
+        }
+        return rawName
+    }
+
+    private fun sanitizeZipEntryPath(path: String): String {
+        val normalized = path.replace('\\', '/')
+        val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." && it != ".." }
+        require(parts.isNotEmpty()) { "Invalid ZIP entry path" }
+        return parts.joinToString("/")
     }
 
     private fun serveAsset(assetPath: String, mime: String): Response {
@@ -256,8 +288,13 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Folder not found")
         }
 
+        val safeSourceDir = sourceDir.canonicalFile
+        if (!isWithinRoot(safeSourceDir)) {
+            throw SecurityException("Access denied: ZIP source outside root boundary.")
+        }
+
         val jobId = UUID.randomUUID().toString()
-        val job = ZipJob(jobId, sourceDir.name, calculateTotalBytes(sourceDir))
+        val job = ZipJob(jobId, sourceDir.name, calculateTotalBytes(safeSourceDir))
         zipJobs[jobId] = job
         zipExecutor.execute {
             val zipFile = File.createTempFile("download-", ".zip", context.cacheDir)
@@ -348,7 +385,7 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             if (formField != "path") {
                 val originalName = params[formField]?.firstOrNull() ?: "upload_${System.currentTimeMillis()}"
                 val tempFile = File(tempFilePath)
-                val targetFile = File(destDir, originalName)
+                val targetFile = resolveSafeDestinationFile(destDir, originalName)
 
                 FileInputStream(tempFile).use { input ->
                     FileOutputStream(targetFile).use { output ->
@@ -404,7 +441,8 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Destination folder not found")
         }
 
-        val destination = File(destinationDir, generateUniqueDuplicateName(source.name, destinationDir)).canonicalFile
+        val destinationName = generateUniqueDuplicateName(source.name, destinationDir)
+        val destination = resolveSafeDestinationFile(destinationDir, destinationName)
         return try {
             if (source.isDirectory) {
                 copyDirectory(source, destination)
@@ -434,7 +472,7 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Destination folder not found")
         }
 
-        val destination = File(destinationDir, source.name).canonicalFile
+        val destination = resolveSafeDestinationFile(destinationDir, source.name)
         if (destination.path == source.canonicalPath) {
             return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Source is already in that folder")
         }
