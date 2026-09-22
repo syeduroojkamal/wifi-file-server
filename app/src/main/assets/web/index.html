@@ -1,550 +1,534 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WiFi File Server — FOSS</title>
     <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-slate-100 font-sans leading-relaxed p-6">
-    <div class="max-w-4xl mx-auto">
-        <header class="flex flex-wrap justify-between items-center gap-4 mb-6">
-            <h2 class="text-2xl font-bold tracking-tight">WiFi File Server</h2>
-            <div id="stats" class="text-slate-400 text-sm"></div>
-        </header>
+  </head>
+  <body class="bg-slate-900 p-6 font-sans leading-relaxed text-slate-100">
+    <div class="mx-auto max-w-4xl">
+      <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h2 class="text-2xl font-bold tracking-tight">WiFi File Server</h2>
+        <div id="stats" class="text-sm text-slate-400"></div>
+      </header>
 
-        <div class="flex gap-3 flex-wrap mb-6">
-            <button class="bg-slate-800 text-slate-100 border border-slate-700 hover:bg-slate-700 transition px-4 py-2 rounded-md font-semibold text-sm cursor-pointer" onclick="createFolder()">
-                New Folder
-            </button>
-            <label class="bg-sky-400 text-slate-950 hover:bg-sky-300 transition px-4 py-2 rounded-md font-semibold text-sm cursor-pointer inline-flex items-center">
-                Upload Files
-                <input type="file" id="file-input" multiple class="hidden" onchange="uploadFiles(this.files)">
-            </label>
-        </div>
+      <div class="mb-6 flex flex-wrap gap-3">
+        <button class="cursor-pointer rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-700" onclick="createFolder()">New Folder</button>
+        <label class="inline-flex cursor-pointer items-center rounded-md bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-300">
+          Upload Files
+          <input type="file" id="file-input" multiple class="hidden" onchange="uploadFiles(this.files)" />
+        </label>
+      </div>
 
-        <div class="flex items-center gap-3 mb-5">
-            <button class="bg-slate-800 text-slate-100 border border-slate-700 hover:bg-slate-700 transition px-4 py-2.5 rounded-md font-semibold text-sm cursor-pointer shrink-0" onclick="navigateUp()">
-                ❮
-            </button>
-            <div id="current-path" class="bg-slate-800 border border-slate-700 px-4 py-2.5 rounded-lg font-mono text-sm break-all flex flex-wrap items-center gap-2 min-w-0 flex-1">
-                /
-            </div>
-        </div>
+      <div class="mb-5 flex items-center gap-3">
+        <button class="shrink-0 cursor-pointer rounded-md border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-slate-700" onclick="navigateUp()">❮</button>
+        <div id="current-path" class="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm break-all">/</div>
+      </div>
 
-        <div class="bg-slate-800 border border-slate-700 rounded-lg overflow-x-auto shadow-sm mb-5">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="border-b border-slate-700 text-slate-400 font-medium">
-                        <th class="px-4 py-3">Name</th>
-                        <th class="px-4 py-3">Size</th>
-                        <th class="px-4 py-3 text-right">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="file-list" class="divide-y divide-slate-700/60"></tbody>
-            </table>
-        </div>
+      <div class="mb-5 overflow-x-auto rounded-lg border border-slate-700 bg-slate-800 shadow-sm">
+        <table class="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 font-medium text-slate-400">
+              <th class="px-4 py-3">Name</th>
+              <th class="px-4 py-3">Size</th>
+              <th class="px-4 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="file-list" class="divide-y divide-slate-700/60"></tbody>
+        </table>
+      </div>
 
-        <div id="drop-zone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center text-slate-400 mb-6 cursor-pointer transition">
-            Drag and drop files here to upload directly
-        </div>
+      <div id="drop-zone" class="mb-6 cursor-pointer rounded-lg border-2 border-dashed border-slate-700 p-6 text-center text-slate-400 transition">Drag and drop files here to upload directly</div>
 
-        <div id="transfer-progress" class="hidden mt-6">
-            <div class="flex justify-between items-center gap-3 mb-3">
-                <h3 class="font-semibold">Transfers</h3>
-                <button
-                    class="text-slate-400 hover:text-slate-100 text-sm cursor-pointer"
-                    onclick="dismissTransferProgress()"
-                >
-                    Dismiss
-                </button>
-            </div>
-            <div id="transfer-progress-list" class="space-y-3"></div>
+      <div id="transfer-progress" class="mt-6 hidden">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h3 class="font-semibold">Transfers</h3>
+          <button class="cursor-pointer text-sm text-slate-400 hover:text-slate-100" onclick="dismissTransferProgress()">Dismiss</button>
         </div>
+        <div id="transfer-progress-list" class="space-y-3"></div>
+      </div>
     </div>
 
-    <div id="preview-overlay" class="hidden fixed inset-0 z-50 bg-slate-950 p-4 sm:p-8">
-        <div class="h-full max-w-6xl mx-auto flex flex-col">
-            <div class="flex items-center justify-between gap-4 mb-4">
-                <h2 id="preview-title" class="font-semibold truncate"></h2>
-                <div class="flex items-center gap-3 shrink-0">
-                    <a id="preview-download" download
-                       class="text-sky-400 hover:text-sky-300 text-sm">Download</a>
-                    <button type="button" onclick="closePreview()"
-                            class="text-5xl leading-none text-slate-300 hover:text-white p-2 -m-2"
-                            aria-label="Close preview">×</button>
-                </div>
-            </div>
-            <div id="preview-content" class="min-h-0 flex-1 flex items-center justify-center"></div>
+    <div id="preview-overlay" class="fixed inset-0 z-50 hidden bg-slate-950 p-4 sm:p-8">
+      <div class="mx-auto flex h-full max-w-6xl flex-col">
+        <div class="mb-4 flex items-center justify-between gap-4">
+          <h2 id="preview-title" class="truncate font-semibold"></h2>
+          <div class="flex shrink-0 items-center gap-3">
+            <a id="preview-download" download class="text-sm text-sky-400 hover:text-sky-300">Download</a>
+            <button type="button" onclick="closePreview()" class="-m-2 p-2 text-5xl leading-none text-slate-300 hover:text-white" aria-label="Close preview">×</button>
+          </div>
         </div>
+        <div id="preview-content" class="flex min-h-0 flex-1 items-center justify-center"></div>
+      </div>
     </div>
 
     <script>
-        let currentPath = '';
-        let uploadQueue = Promise.resolve();
+      let currentPath = '';
+      let uploadQueue = Promise.resolve();
 
-        async function fetchDirectory(path = '') {
-            currentPath = path;
-            renderCurrentPath(path);
-            const res = await fetch(`/api/list?path=${encodeURIComponent(path)}`);
-            if (!res.ok) return alert('Failed to read folder');
-            const items = await res.json();
-            const tbody = document.getElementById('file-list');
-            tbody.innerHTML = '';
+      async function fetchDirectory(path = '') {
+          currentPath = path;
+          renderCurrentPath(path);
+          const res = await fetch(`/api/list?path=${encodeURIComponent(path)}`);
+          if (!res.ok) return alert('Failed to read folder');
+          const items = await res.json();
+          const tbody = document.getElementById('file-list');
+          tbody.innerHTML = '';
 
-            // Complex
-            // items.sort((a, b) => b.isDir - a.isDir || a.name.localeCompare(b.name));
+          // Complex
+          // items.sort((a, b) => b.isDir - a.isDir || a.name.localeCompare(b.name));
 
-            // Less Complex
-            items.sort((a, b) => {
-                if (a.isDir !== b.isDir) {
-                    return b.isDir - a.isDir; // folders first
-                }
-                return a.name.localeCompare(b.name); // then alphabetical
-            });
+          // Less Complex
+          items.sort((a, b) => {
+              if (a.isDir !== b.isDir) {
+                  return b.isDir - a.isDir; // folders first
+              }
+              return a.name.localeCompare(b.name); // then alphabetical
+          });
 
-            if (path) {
-                const parentPath = path.split('/').slice(0, -1).join('/');
-                const parentRow = document.createElement('tr');
-                parentRow.className = 'hover:bg-slate-700/50 transition cursor-pointer';
-                parentRow.innerHTML = `
-                    <td class="px-4 py-3">..</td>
-                    <td class="px-4 py-3 text-slate-400">Parent folder</td>
-                    <td class="px-4 py-3"></td>
-                `;
-                parentRow.dataset.path = parentPath;
-                parentRow.dataset.isDir = 'true';
-                parentRow.addEventListener('click', () => fetchDirectory(parentPath));
-                parentRow.addEventListener('dragover', handleDragOver);
-                parentRow.addEventListener('dragleave', handleDragLeave);
-                parentRow.addEventListener('drop', handleDrop);
-                tbody.appendChild(parentRow);
-            }
+          if (path) {
+              const parentPath = path.split('/').slice(0, -1).join('/');
+              const parentRow = document.createElement('tr');
+              parentRow.className = 'hover:bg-slate-700/50 transition cursor-pointer';
+              parentRow.innerHTML = `
+                  <td class="px-4 py-3">..</td>
+                  <td class="px-4 py-3 text-slate-400">Parent folder</td>
+                  <td class="px-4 py-3"></td>
+              `;
+              parentRow.dataset.path = parentPath;
+              parentRow.dataset.isDir = 'true';
+              parentRow.addEventListener('click', () => fetchDirectory(parentPath));
+              parentRow.addEventListener('dragover', handleDragOver);
+              parentRow.addEventListener('dragleave', handleDragLeave);
+              parentRow.addEventListener('drop', handleDrop);
+              tbody.appendChild(parentRow);
+          }
 
-            items.forEach(item => {
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-slate-700/50 transition';
-                const relPath = path ? `${path}/${item.name}` : item.name;
-                tr.draggable = true;
-                tr.dataset.path = relPath;
-                tr.dataset.isDir = String(item.isDir);
+          items.forEach(item => {
+              const tr = document.createElement('tr');
+              tr.className = 'hover:bg-slate-700/50 transition';
+              const relPath = path ? `${path}/${item.name}` : item.name;
+              tr.draggable = true;
+              tr.dataset.path = relPath;
+              tr.dataset.isDir = String(item.isDir);
 
-                if (item.isDir) {
-                    tr.innerHTML = `
-                        <td class="px-4 py-3">📁 <a href="javascript:void(0)" onclick="fetchDirectory('${relPath}')" class="text-sky-400 hover:underline break-all font-medium">${item.name}</a></td>
-                        <td class="px-4 py-3 text-slate-400">Folder</td>
-                        <td class="px-4 py-3 text-right"><button class="text-sky-400 hover:text-sky-300 text-lg mr-3 cursor-pointer" onclick="downloadFolder('${relPath}', '${item.name}')" aria-label="Download ${item.name} as ZIP" title="Download folder as ZIP">📦</button><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
-                    `;
-                } else {
-                    const previewable = isPreviewable(item.name);
-                    const fileName = previewable
-                        ? `<a href="#" onclick="event.preventDefault(); previewFile('${encodeURIComponent(relPath)}', '${encodeURIComponent(item.name)}')" class="text-sky-400 hover:underline break-all">${item.name}</a>`
-                        : `<span class="text-slate-100 break-all">${item.name}</span>`;
-                    tr.innerHTML = `
-                        <td class="px-4 py-3">📄 ${fileName}</td>
-                        <td class="px-4 py-3 text-slate-400">${formatBytes(item.size)}</td>
-                        <td class="px-4 py-3 text-right"><a href="/api/download?path=${encodeURIComponent(relPath)}" download aria-label="Download ${item.name}" title="Download" class="text-sky-400 hover:text-sky-300 text-lg mr-3">⬇️</a><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
-                    `;
-                }
-                tr.addEventListener('dragstart', handleDragStart);
-                tr.addEventListener('dragend', clearDragState);
-                if (item.isDir) {
-                    tr.addEventListener('dragover', handleDragOver);
-                    tr.addEventListener('dragleave', handleDragLeave);
-                    tr.addEventListener('drop', handleDrop);
-                }
-                tbody.appendChild(tr);
-            });
-        }
+              if (item.isDir) {
+                  tr.innerHTML = `
+                      <td class="px-4 py-3">📁 <a href="javascript:void(0)" onclick="fetchDirectory('${relPath}')" class="text-sky-400 hover:underline break-all font-medium">${item.name}</a></td>
+                      <td class="px-4 py-3 text-slate-400">Folder</td>
+                      <td class="px-4 py-3 text-right"><button class="text-sky-400 hover:text-sky-300 text-lg mr-3 cursor-pointer" onclick="downloadFolder('${relPath}', '${item.name}')" aria-label="Download ${item.name} as ZIP" title="Download folder as ZIP">📦</button><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
+                  `;
+              } else {
+                  const previewable = isPreviewable(item.name);
+                  const fileName = previewable
+                      ? `<a href="#" onclick="event.preventDefault(); previewFile('${encodeURIComponent(relPath)}', '${encodeURIComponent(item.name)}')" class="text-sky-400 hover:underline break-all">${item.name}</a>`
+                      : `<span class="text-slate-100 break-all">${item.name}</span>`;
+                  tr.innerHTML = `
+                      <td class="px-4 py-3">📄 ${fileName}</td>
+                      <td class="px-4 py-3 text-slate-400">${formatBytes(item.size)}</td>
+                      <td class="px-4 py-3 text-right"><a href="/api/download?path=${encodeURIComponent(relPath)}" download aria-label="Download ${item.name}" title="Download" class="text-sky-400 hover:text-sky-300 text-lg mr-3">⬇️</a><button class="text-violet-400 hover:text-violet-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="duplicateItem('${relPath}')">Duplicate</button><button class="text-amber-400 hover:text-amber-300 hover:underline text-xs font-medium mr-3 cursor-pointer" onclick="moveItem(decodeURIComponent('${encodeURIComponent(relPath).replace(/'/g, '%27')}'))">Move</button><button class="text-rose-400 hover:text-rose-300 hover:underline text-xs font-medium cursor-pointer" onclick="deleteItem('${relPath}')">Delete</button></td>
+                  `;
+              }
+              tr.addEventListener('dragstart', handleDragStart);
+              tr.addEventListener('dragend', clearDragState);
+              if (item.isDir) {
+                  tr.addEventListener('dragover', handleDragOver);
+                  tr.addEventListener('dragleave', handleDragLeave);
+                  tr.addEventListener('drop', handleDrop);
+              }
+              tbody.appendChild(tr);
+          });
+      }
 
-        function renderCurrentPath(path) {
-            const currentPathElement = document.getElementById('current-path');
-            currentPathElement.replaceChildren();
+      function renderCurrentPath(path) {
+          const currentPathElement = document.getElementById('current-path');
+          currentPathElement.replaceChildren();
 
-            const root = document.createElement('span');
-            root.textContent = '/';
-            currentPathElement.appendChild(root);
+          const root = document.createElement('span');
+          root.textContent = '/';
+          currentPathElement.appendChild(root);
 
-            if (!path) return;
+          if (!path) return;
 
-            path.split('/').forEach((folder) => {
-                const separator = document.createElement('span');
-                separator.className = 'text-slate-500';
-                separator.textContent = '❯';
-                currentPathElement.appendChild(separator);
+          path.split('/').forEach((folder) => {
+              const separator = document.createElement('span');
+              separator.className = 'text-slate-500';
+              separator.textContent = '❯';
+              currentPathElement.appendChild(separator);
 
-                const folderElement = document.createElement('span');
-                folderElement.textContent = folder;
-                currentPathElement.appendChild(folderElement);
-            });
-        }
+              const folderElement = document.createElement('span');
+              folderElement.textContent = folder;
+              currentPathElement.appendChild(folderElement);
+          });
+      }
 
-        function formatBytes(bytes) {
-            if (!bytes || bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
+      function formatBytes(bytes) {
+          if (!bytes || bytes === 0) return '0 B';
+          const k = 1024;
+          const sizes = ['B', 'KB', 'MB', 'GB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+      }
 
-        function isPreviewable(name) {
-            return /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|ogv|mp3|wav|ogg|m4a|aac|flac)$/i.test(name);
-        }
+      function isPreviewable(name) {
+          return /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|ogv|mp3|wav|ogg|m4a|aac|flac)$/i.test(name);
+      }
 
-        function previewFile(encodedPath, encodedName) {
-            const path = decodeURIComponent(encodedPath);
-            const name = decodeURIComponent(encodedName);
-            const url = `/api/download?path=${encodeURIComponent(path)}&inline=true`;
-            const extension = name.split('.').pop().toLowerCase();
-            const content = document.getElementById('preview-content');
-            content.replaceChildren();
+      function previewFile(encodedPath, encodedName) {
+          const path = decodeURIComponent(encodedPath);
+          const name = decodeURIComponent(encodedName);
+          const url = `/api/download?path=${encodeURIComponent(path)}&inline=true`;
+          const extension = name.split('.').pop().toLowerCase();
+          const content = document.getElementById('preview-content');
+          content.replaceChildren();
 
-            if (/^(jpg|jpeg|png|gif|webp|bmp|svg)$/.test(extension)) {
-                const image = document.createElement('img');
-                image.src = url;
-                image.alt = name;
-                image.className = 'max-w-full max-h-full object-contain';
-                content.appendChild(image);
-            } else if (/^(mp4|webm|ogv)$/.test(extension)) {
-                const video = document.createElement('video');
-                video.src = url;
-                video.controls = true;
-                video.autoplay = true;
-                video.tabIndex = 0;
-                video.className = 'max-w-full max-h-full';
-                video.addEventListener('keydown', handleMediaKeydown);
-                content.appendChild(video);
-                video.focus();
-            } else {
-                const audio = document.createElement('audio');
-                audio.src = url;
-                audio.controls = true;
-                audio.autoplay = true;
-                audio.tabIndex = 0;
-                audio.className = 'w-full max-w-xl';
-                audio.addEventListener('keydown', handleMediaKeydown);
-                content.appendChild(audio);
-                audio.focus();
-            }
+          if (/^(jpg|jpeg|png|gif|webp|bmp|svg)$/.test(extension)) {
+              const image = document.createElement('img');
+              image.src = url;
+              image.alt = name;
+              image.className = 'max-w-full max-h-full object-contain';
+              content.appendChild(image);
+          } else if (/^(mp4|webm|ogv)$/.test(extension)) {
+              const video = document.createElement('video');
+              video.src = url;
+              video.controls = true;
+              video.autoplay = true;
+              video.tabIndex = 0;
+              video.className = 'max-w-full max-h-full';
+              video.addEventListener('keydown', handleMediaKeydown);
+              content.appendChild(video);
+              video.focus();
+          } else {
+              const audio = document.createElement('audio');
+              audio.src = url;
+              audio.controls = true;
+              audio.autoplay = true;
+              audio.tabIndex = 0;
+              audio.className = 'w-full max-w-xl';
+              audio.addEventListener('keydown', handleMediaKeydown);
+              content.appendChild(audio);
+              audio.focus();
+          }
 
-            document.getElementById('preview-title').textContent = name;
-            document.getElementById('preview-download').href = `/api/download?path=${encodeURIComponent(path)}`;
-            document.getElementById('preview-overlay').classList.remove('hidden');
-        }
+          document.getElementById('preview-title').textContent = name;
+          document.getElementById('preview-download').href = `/api/download?path=${encodeURIComponent(path)}`;
+          document.getElementById('preview-overlay').classList.remove('hidden');
+      }
 
-        function handleMediaKeydown(event) {
-            const media = event.currentTarget;
-            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                event.preventDefault();
-                const direction = event.key === 'ArrowLeft' ? -1 : 1;
-                media.currentTime = Math.max(
-                    0,
-                    Math.min(media.duration || Infinity, media.currentTime + direction * 5)
-                );
-            } else if (event.key === ' ') {
-                event.preventDefault();
-                if (media.paused) media.play();
-                else media.pause();
-            }
-        }
+      function handleMediaKeydown(event) {
+          const media = event.currentTarget;
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+              event.preventDefault();
+              const direction = event.key === 'ArrowLeft' ? -1 : 1;
+              media.currentTime = Math.max(
+                  0,
+                  Math.min(media.duration || Infinity, media.currentTime + direction * 5)
+              );
+          } else if (event.key === ' ') {
+              event.preventDefault();
+              if (media.paused) media.play();
+              else media.pause();
+          }
+      }
 
-        function closePreview() {
-            const content = document.getElementById('preview-content');
-            content.querySelectorAll('video, audio').forEach((media) => {
-                media.pause();
-                media.removeAttribute('src');
-                media.load();
-            });
-            content.replaceChildren();
-            document.getElementById('preview-overlay').classList.add('hidden');
-        }
+      function closePreview() {
+          const content = document.getElementById('preview-content');
+          content.querySelectorAll('video, audio').forEach((media) => {
+              media.pause();
+              media.removeAttribute('src');
+              media.load();
+          });
+          content.replaceChildren();
+          document.getElementById('preview-overlay').classList.add('hidden');
+      }
 
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') closePreview();
-        });
+      document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') closePreview();
+      });
 
-        function navigateUp() {
-            if (!currentPath) return;
-            const parts = currentPath.split('/');
-            parts.pop();
-            fetchDirectory(parts.join('/'));
-        }
+      function navigateUp() {
+          if (!currentPath) return;
+          const parts = currentPath.split('/');
+          parts.pop();
+          fetchDirectory(parts.join('/'));
+      }
 
-        let draggedPath = null;
+      let draggedPath = null;
 
-        function handleDragStart(event) {
-            draggedPath = event.currentTarget.dataset.path;
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', draggedPath);
-            event.currentTarget.classList.add('opacity-50');
-        }
+      function handleDragStart(event) {
+          draggedPath = event.currentTarget.dataset.path;
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', draggedPath);
+          event.currentTarget.classList.add('opacity-50');
+      }
 
-        function clearDragState(event) {
-            draggedPath = null;
-            event.currentTarget.classList.remove('opacity-50');
-            document.querySelectorAll('[data-is-dir="true"]').forEach(row => {
-                row.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
-            });
-        }
+      function clearDragState(event) {
+          draggedPath = null;
+          event.currentTarget.classList.remove('opacity-50');
+          document.querySelectorAll('[data-is-dir="true"]').forEach(row => {
+              row.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
+          });
+      }
 
-        function handleDragOver(event) {
-            if (!draggedPath || draggedPath === event.currentTarget.dataset.path) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
-            event.currentTarget.classList.add('ring-2', 'ring-sky-400', 'bg-slate-700');
-        }
+      function handleDragOver(event) {
+          if (!draggedPath || draggedPath === event.currentTarget.dataset.path) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          event.currentTarget.classList.add('ring-2', 'ring-sky-400', 'bg-slate-700');
+      }
 
-        function handleDragLeave(event) {
-            if (!event.currentTarget.contains(event.relatedTarget)) {
-                event.currentTarget.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
-            }
-        }
+      function handleDragLeave(event) {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+              event.currentTarget.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
+          }
+      }
 
-        async function handleDrop(event) {
-            event.preventDefault();
-            const destination = event.currentTarget.dataset.path;
-            event.currentTarget.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
-            if (!draggedPath || draggedPath === destination) return;
+      async function handleDrop(event) {
+          event.preventDefault();
+          const destination = event.currentTarget.dataset.path;
+          event.currentTarget.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700');
+          if (!draggedPath || draggedPath === destination) return;
 
-            const res = await fetch(
-                `/api/move?from=${encodeURIComponent(draggedPath)}&to=${encodeURIComponent(destination)}`,
-                { method: 'POST' }
-            );
-            if (res.ok) {
-                fetchDirectory(currentPath);
-            } else {
-                alert(await res.text() || 'Move failed');
-            }
-            draggedPath = null;
-        }
+          const res = await fetch(
+              `/api/move?from=${encodeURIComponent(draggedPath)}&to=${encodeURIComponent(destination)}`,
+              { method: 'POST' }
+          );
+          if (res.ok) {
+              fetchDirectory(currentPath);
+          } else {
+              alert(await res.text() || 'Move failed');
+          }
+          draggedPath = null;
+      }
 
-        function downloadFolder(path, name) {
-            if (!confirm(`Create and download a ZIP archive of "${name}"? This may take some time.`)) return;
-            startZipDownload(path, name);
-        }
+      function downloadFolder(path, name) {
+          if (!confirm(`Create and download a ZIP archive of "${name}"? This may take some time.`)) return;
+          startZipDownload(path, name);
+      }
 
-        async function createFolder() {
-            const name = prompt('Folder Name:');
-            if (!name) return;
-            const path = currentPath ? `${currentPath}/${name}` : name;
-            const res = await fetch(`/api/create-folder?path=${encodeURIComponent(path)}`, { method: 'POST' });
-            if (res.ok) fetchDirectory(currentPath);
-            else alert('Failed to create folder');
-        }
+      async function createFolder() {
+          const name = prompt('Folder Name:');
+          if (!name) return;
+          const path = currentPath ? `${currentPath}/${name}` : name;
+          const res = await fetch(`/api/create-folder?path=${encodeURIComponent(path)}`, { method: 'POST' });
+          if (res.ok) fetchDirectory(currentPath);
+          else alert('Failed to create folder');
+      }
 
-        async function deleteItem(path) {
-            if (!confirm(`Delete ${path}?`)) return;
-            const res = await fetch(`/api/delete?path=${encodeURIComponent(path)}`, { method: 'POST' });
-            if (res.ok) fetchDirectory(currentPath);
-            else alert('Delete failed');
-        }
+      async function deleteItem(path) {
+          if (!confirm(`Delete ${path}?`)) return;
+          const res = await fetch(`/api/delete?path=${encodeURIComponent(path)}`, { method: 'POST' });
+          if (res.ok) fetchDirectory(currentPath);
+          else alert('Delete failed');
+      }
 
-        async function duplicateItem(path) {
-            const name = path.split('/').pop();
-            const duplicateName = name.includes('.')
-                ? `${name.slice(0, name.lastIndexOf('.'))}_copy${name.slice(name.lastIndexOf('.'))}`
-                : `${name}_copy`;
+      async function duplicateItem(path) {
+          const name = path.split('/').pop();
+          const duplicateName = name.includes('.')
+              ? `${name.slice(0, name.lastIndexOf('.'))}_copy${name.slice(name.lastIndexOf('.'))}`
+              : `${name}_copy`;
 
-            if (!confirm(`Duplicate "${name}" to "${duplicateName}"?`)) return;
+          if (!confirm(`Duplicate "${name}" to "${duplicateName}"?`)) return;
 
-            const parentPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-            const res = await fetch(
-                `/api/duplicate?from=${encodeURIComponent(path)}&to=${encodeURIComponent(parentPath)}`,
-                { method: 'POST' }
-            );
-            if (res.ok) fetchDirectory(currentPath);
-            else alert(await res.text() || 'Duplicate failed');
-        }
+          const parentPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+          const res = await fetch(
+              `/api/duplicate?from=${encodeURIComponent(path)}&to=${encodeURIComponent(parentPath)}`,
+              { method: 'POST' }
+          );
+          if (res.ok) fetchDirectory(currentPath);
+          else alert(await res.text() || 'Duplicate failed');
+      }
 
-        async function moveItem(path) {
-            const destination = prompt('Move to folder (relative path, blank for root):', currentPath);
-            if (destination === null) return;
-            const normalizedDestination = destination.trim().replace(/^\/+|\/+$/g, '');
-            const res = await fetch(
-                `/api/move?from=${encodeURIComponent(path)}&to=${encodeURIComponent(normalizedDestination)}`,
-                { method: 'POST' }
-            );
-            if (res.ok) fetchDirectory(currentPath);
-            else alert(await res.text() || 'Move failed');
-        }
+      async function moveItem(path) {
+          const destination = prompt('Move to folder (relative path, blank for root):', currentPath);
+          if (destination === null) return;
+          const normalizedDestination = destination.trim().replace(/^\/+|\/+$/g, '');
+          const res = await fetch(
+              `/api/move?from=${encodeURIComponent(path)}&to=${encodeURIComponent(normalizedDestination)}`,
+              { method: 'POST' }
+          );
+          if (res.ok) fetchDirectory(currentPath);
+          else alert(await res.text() || 'Move failed');
+      }
 
-        function uploadFile(file, targetPath, progressElement, statusElement) {
-            return new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('path', targetPath);
+      function uploadFile(file, targetPath, progressElement, statusElement) {
+          return new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('path', targetPath);
 
-                xhr.upload.addEventListener('progress', (event) => {
-                    if (!event.lengthComputable) return;
-                    const percent = Math.round((event.loaded / event.total) * 100);
-                    progressElement.value = percent;
-                    statusElement.textContent = `${percent}%`;
-                });
+              xhr.upload.addEventListener('progress', (event) => {
+                  if (!event.lengthComputable) return;
+                  const percent = Math.round((event.loaded / event.total) * 100);
+                  progressElement.value = percent;
+                  statusElement.textContent = `${percent}%`;
+              });
 
-                xhr.addEventListener('load', () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        progressElement.value = 100;
-                        statusElement.textContent = 'Done';
-                        resolve();
-                    } else {
-                        reject(new Error(`Upload failed (${xhr.status})`));
-                    }
-                });
-                xhr.addEventListener('error', () => reject(new Error('Network error')));
-                xhr.open('POST', '/api/upload');
-                xhr.send(formData);
-            });
-        }
+              xhr.addEventListener('load', () => {
+                  if (xhr.status >= 200 && xhr.status < 300) {
+                      progressElement.value = 100;
+                      statusElement.textContent = 'Done';
+                      resolve();
+                  } else {
+                      reject(new Error(`Upload failed (${xhr.status})`));
+                  }
+              });
+              xhr.addEventListener('error', () => reject(new Error('Network error')));
+              xhr.open('POST', '/api/upload');
+              xhr.send(formData);
+          });
+      }
 
-        async function uploadFiles(files) {
-            if (!files.length) return;
+      async function uploadFiles(files) {
+          if (!files.length) return;
 
-            const targetPath = currentPath;
-            let existingNames;
-            try {
-                const response = await fetch(`/api/list?path=${encodeURIComponent(targetPath)}`);
-                if (!response.ok) throw new Error('Failed to check the destination folder');
-                const items = await response.json();
-                existingNames = new Set(items.filter((item) => !item.isDir).map((item) => item.name));
-            } catch (error) {
-                alert(error.message);
-                return;
-            }
+          const targetPath = currentPath;
+          let existingNames;
+          try {
+              const response = await fetch(`/api/list?path=${encodeURIComponent(targetPath)}`);
+              if (!response.ok) throw new Error('Failed to check the destination folder');
+              const items = await response.json();
+              existingNames = new Set(items.filter((item) => !item.isDir).map((item) => item.name));
+          } catch (error) {
+              alert(error.message);
+              return;
+          }
 
-            const filesToUpload = [];
-            const confirmedNames = new Set();
-            const declinedNames = new Set();
-            for (const file of files) {
-                if (existingNames.has(file.name)) {
-                    if (declinedNames.has(file.name)) continue;
-                    if (!confirmedNames.has(file.name)) {
-                        if (!confirm(`"${file.name}" already exists. Overwrite it?`)) {
-                            declinedNames.add(file.name);
-                            continue;
-                        }
-                        confirmedNames.add(file.name);
-                    }
-                }
-                filesToUpload.push(file);
-            }
-            if (!filesToUpload.length) return;
+          const filesToUpload = [];
+          const confirmedNames = new Set();
+          const declinedNames = new Set();
+          for (const file of files) {
+              if (existingNames.has(file.name)) {
+                  if (declinedNames.has(file.name)) continue;
+                  if (!confirmedNames.has(file.name)) {
+                      if (!confirm(`"${file.name}" already exists. Overwrite it?`)) {
+                          declinedNames.add(file.name);
+                          continue;
+                      }
+                      confirmedNames.add(file.name);
+                  }
+              }
+              filesToUpload.push(file);
+          }
+          if (!filesToUpload.length) return;
 
-            const progressList = document.getElementById('transfer-progress');
-            const progressItems = document.getElementById('transfer-progress-list');
-            progressList.classList.remove('hidden');
+          const progressList = document.getElementById('transfer-progress');
+          const progressItems = document.getElementById('transfer-progress-list');
+          progressList.classList.remove('hidden');
 
-            for (const file of filesToUpload) {
-                const row = document.createElement('div');
-                row.className = 'bg-slate-800 border border-slate-700 rounded-lg p-3';
+          for (const file of filesToUpload) {
+              const row = document.createElement('div');
+              row.className = 'bg-slate-800 border border-slate-700 rounded-lg p-3';
 
-                const label = document.createElement('div');
-                label.className = 'flex justify-between gap-3 text-sm mb-2';
-                const name = document.createElement('span');
-                name.className = 'truncate';
-                name.textContent = file.name;
-                const status = document.createElement('span');
-                status.className = 'text-slate-400 shrink-0';
-                status.textContent = '0%';
-                label.append(name, status);
+              const label = document.createElement('div');
+              label.className = 'flex justify-between gap-3 text-sm mb-2';
+              const name = document.createElement('span');
+              name.className = 'truncate';
+              name.textContent = file.name;
+              const status = document.createElement('span');
+              status.className = 'text-slate-400 shrink-0';
+              status.textContent = '0%';
+              label.append(name, status);
 
-                const progress = document.createElement('progress');
-                progress.className = 'w-full h-2 accent-sky-400';
-                progress.max = 100;
-                progress.value = 0;
-                row.append(label, progress);
-                progressItems.appendChild(row);
+              const progress = document.createElement('progress');
+              progress.className = 'w-full h-2 accent-sky-400';
+              progress.max = 100;
+              progress.value = 0;
+              row.append(label, progress);
+              progressItems.appendChild(row);
 
-                uploadQueue = uploadQueue.then(async () => {
-                    try {
-                        await uploadFile(file, targetPath, progress, status);
-                        await fetchDirectory(currentPath);
-                    } catch (error) {
-                        status.className = 'text-rose-400 shrink-0';
-                        status.textContent = error.message;
-                    }
-                });
-            }
-        }
+              uploadQueue = uploadQueue.then(async () => {
+                  try {
+                      await uploadFile(file, targetPath, progress, status);
+                      await fetchDirectory(currentPath);
+                  } catch (error) {
+                      status.className = 'text-rose-400 shrink-0';
+                      status.textContent = error.message;
+                  }
+              });
+          }
+      }
 
-        async function startZipDownload(path, name) {
-            const progressList = document.getElementById('transfer-progress');
-            const progressItems = document.getElementById('transfer-progress-list');
-            progressList.classList.remove('hidden');
+      async function startZipDownload(path, name) {
+          const progressList = document.getElementById('transfer-progress');
+          const progressItems = document.getElementById('transfer-progress-list');
+          progressList.classList.remove('hidden');
 
-            const row = document.createElement('div');
-            row.className = 'bg-slate-800 border border-slate-700 rounded-lg p-3';
-            const label = document.createElement('div');
-            label.className = 'flex justify-between gap-3 text-sm mb-2';
-            const title = document.createElement('span');
-            title.className = 'truncate';
-            title.textContent = `Creating ZIP: ${name}`;
-            const status = document.createElement('span');
-            status.className = 'text-slate-400 shrink-0';
-            status.textContent = 'Starting';
-            label.append(title, status);
-            const progress = document.createElement('progress');
-            progress.className = 'w-full h-2 accent-sky-400';
-            progress.max = 100;
-            progress.value = 0;
-            row.append(label, progress);
-            progressItems.appendChild(row);
+          const row = document.createElement('div');
+          row.className = 'bg-slate-800 border border-slate-700 rounded-lg p-3';
+          const label = document.createElement('div');
+          label.className = 'flex justify-between gap-3 text-sm mb-2';
+          const title = document.createElement('span');
+          title.className = 'truncate';
+          title.textContent = `Creating ZIP: ${name}`;
+          const status = document.createElement('span');
+          status.className = 'text-slate-400 shrink-0';
+          status.textContent = 'Starting';
+          label.append(title, status);
+          const progress = document.createElement('progress');
+          progress.className = 'w-full h-2 accent-sky-400';
+          progress.max = 100;
+          progress.value = 0;
+          row.append(label, progress);
+          progressItems.appendChild(row);
 
-            try {
-                const response = await fetch(`/api/zip?path=${encodeURIComponent(path)}`, { method: 'POST' });
-                if (!response.ok) throw new Error('Failed to start ZIP creation');
-                const { jobId } = await response.json();
-                pollZipProgress(jobId, name, progress, status);
-            } catch (error) {
-                status.className = 'text-rose-400 shrink-0';
-                status.textContent = error.message;
-            }
-        }
+          try {
+              const response = await fetch(`/api/zip?path=${encodeURIComponent(path)}`, { method: 'POST' });
+              if (!response.ok) throw new Error('Failed to start ZIP creation');
+              const { jobId } = await response.json();
+              pollZipProgress(jobId, name, progress, status);
+          } catch (error) {
+              status.className = 'text-rose-400 shrink-0';
+              status.textContent = error.message;
+          }
+      }
 
-        async function pollZipProgress(jobId, name, progress, status) {
-            try {
-                const response = await fetch(`/api/zip-progress?job=${encodeURIComponent(jobId)}`);
-                if (!response.ok) throw new Error('Failed to read ZIP progress');
-                const job = await response.json();
-                progress.value = job.progress;
-                status.textContent = `${job.progress}%`;
+      async function pollZipProgress(jobId, name, progress, status) {
+          try {
+              const response = await fetch(`/api/zip-progress?job=${encodeURIComponent(jobId)}`);
+              if (!response.ok) throw new Error('Failed to read ZIP progress');
+              const job = await response.json();
+              progress.value = job.progress;
+              status.textContent = `${job.progress}%`;
 
-                if (job.state === 'complete') {
-                    progress.value = 100;
-                    status.textContent = 'Downloading';
-                    window.location.href = `/api/download?job=${encodeURIComponent(jobId)}`;
-                } else if (job.state === 'failed') {
-                    throw new Error(job.error || 'ZIP creation failed');
-                } else {
-                    setTimeout(() => pollZipProgress(jobId, name, progress, status), 500);
-                }
-            } catch (error) {
-                status.className = 'text-rose-400 shrink-0';
-                status.textContent = error.message;
-            }
-        }
+              if (job.state === 'complete') {
+                  progress.value = 100;
+                  status.textContent = 'Downloading';
+                  window.location.href = `/api/download?job=${encodeURIComponent(jobId)}`;
+              } else if (job.state === 'failed') {
+                  throw new Error(job.error || 'ZIP creation failed');
+              } else {
+                  setTimeout(() => pollZipProgress(jobId, name, progress, status), 500);
+              }
+          } catch (error) {
+              status.className = 'text-rose-400 shrink-0';
+              status.textContent = error.message;
+          }
+      }
 
-        function dismissTransferProgress() {
-            const progressList = document.getElementById('transfer-progress');
-            document.getElementById('transfer-progress-list').innerHTML = '';
-            progressList.classList.add('hidden');
-        }
+      function dismissTransferProgress() {
+          const progressList = document.getElementById('transfer-progress');
+          document.getElementById('transfer-progress-list').innerHTML = '';
+          progressList.classList.add('hidden');
+      }
 
-        const dropZone = document.getElementById('drop-zone');
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('border-sky-400', 'bg-slate-800');
-        });
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('border-sky-400', 'bg-slate-800');
-        });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('border-sky-400', 'bg-slate-800');
-            if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
-        });
+      const dropZone = document.getElementById('drop-zone');
+      dropZone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          dropZone.classList.add('border-sky-400', 'bg-slate-800');
+      });
+      dropZone.addEventListener('dragleave', () => {
+          dropZone.classList.remove('border-sky-400', 'bg-slate-800');
+      });
+      dropZone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          dropZone.classList.remove('border-sky-400', 'bg-slate-800');
+          if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+      });
 
-        fetchDirectory('');
+      fetchDirectory('');
     </script>
-</body>
+  </body>
 </html>
