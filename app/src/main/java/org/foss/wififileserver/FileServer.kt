@@ -47,8 +47,11 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
 
     private fun resolveSafeFile(subPath: String?): File {
         val cleanSubPath = if (subPath.isNullOrBlank()) "" else URLDecoder.decode(subPath, "UTF-8")
-        val target = File(rootDir, cleanSubPath).canonicalFile
-        if (!target.path.startsWith(rootDir.canonicalPath)) {
+        val root = rootDir.canonicalFile
+        val target = File(root, cleanSubPath).canonicalFile
+        val rootPath = root.absolutePath
+        val targetPath = target.absolutePath
+        if (target != root && !targetPath.startsWith(rootPath + File.separator)) {
             throw SecurityException("Access denied: Path outside root boundary.")
         }
         return target
