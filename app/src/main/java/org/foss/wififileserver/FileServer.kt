@@ -344,24 +344,26 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
 
     private fun pruneExpiredZipJobs() {
         val cutoff = System.currentTimeMillis() - zipJobTimeoutMs
-        zipJobs.entries.removeIf { (_, job) ->
+        val iterator = zipJobs.entries.iterator()
+        while (iterator.hasNext()) {
+            val job = iterator.next().value
             if (job.createdAt < cutoff && job.state == "compressing") {
                 job.state = "expired"
                 job.error = "ZIP job expired"
                 job.zipFile?.delete()
-                true
-            } else {
-                false
+                iterator.remove()
             }
         }
     }
 
     private fun cancelAllZipJobs() {
-        zipJobs.entries.removeIf { (_, job) ->
+        val iterator = zipJobs.entries.iterator()
+        while (iterator.hasNext()) {
+            val job = iterator.next().value
             job.state = "cancelled"
             job.error = "ZIP job cancelled"
             job.zipFile?.delete()
-            true
+            iterator.remove()
         }
     }
 

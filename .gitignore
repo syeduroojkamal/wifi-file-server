@@ -5,6 +5,9 @@ app/build/
 
 # Local machine-specific configuration
 local.properties
+key.properties
+*.jks
+*.keystore
 
 # IDE specific files (Android Studio / IntelliJ)
 .idea/
