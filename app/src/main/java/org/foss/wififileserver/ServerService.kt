@@ -21,13 +21,21 @@ class ServerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_SERVER) {
+            sendStatus(BROADCAST_SERVER_STOPPED)
+            stopForeground(true)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val port = intent?.getIntExtra("PORT", 8080) ?: 8080
+        val address = intent?.getStringExtra(EXTRA_SERVER_ADDRESS)
 
         if (server == null) {
             server = FileServer(applicationContext, port)
             try {
                 server?.start()
-                val notification = buildNotification("Running on port $port")
+                val notification = buildNotification(address, port)
                 startForeground(NOTIFICATION_ID, notification)
                 sendStatus(BROADCAST_SERVER_STARTED)
             } catch (e: Exception) {
@@ -64,12 +72,15 @@ class ServerService : Service() {
         }
     }
 
-    private fun buildNotification(contentText: String): Notification {
-        val launchIntent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, launchIntent,
+    private fun buildNotification(address: String?, port: Int): Notification {
+        val stopIntent = Intent(this, ServerService::class.java).apply {
+            action = ACTION_STOP_SERVER
+        }
+        val pendingIntent = PendingIntent.getService(
+            this, 0, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val contentText = "${address ?: "Server"}:$port - Tap to stop"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("WiFi File Server Active")
@@ -94,6 +105,9 @@ class ServerService : Service() {
         const val NOTIFICATION_ID = 101
         const val BROADCAST_SERVER_STARTED = "org.foss.wififileserver.SERVER_STARTED"
         const val BROADCAST_SERVER_FAILED = "org.foss.wififileserver.SERVER_FAILED"
+        const val BROADCAST_SERVER_STOPPED = "org.foss.wififileserver.SERVER_STOPPED"
         const val EXTRA_ERROR_MESSAGE = "ERROR_MESSAGE"
+        const val EXTRA_SERVER_ADDRESS = "SERVER_ADDRESS"
+        const val ACTION_STOP_SERVER = "org.foss.wififileserver.STOP_SERVER"
     }
 }

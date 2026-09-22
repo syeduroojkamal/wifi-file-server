@@ -60,6 +60,15 @@ class MainActivity : AppCompatActivity() {
                         ?: "Unable to start the server"
                     Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                 }
+                ServerService.BROADCAST_SERVER_STOPPED -> {
+                    isStarting = false
+                    isRunning = false
+                    pendingAddress = null
+                    btnToggle.isEnabled = true
+                    textAddress.text = "Connect to Wi-Fi to start"
+                    textHint.visibility = View.GONE
+                    btnToggle.text = "Start Server"
+                }
             }
         }
     }
@@ -77,6 +86,7 @@ class MainActivity : AppCompatActivity() {
             IntentFilter().apply {
                 addAction(ServerService.BROADCAST_SERVER_STARTED)
                 addAction(ServerService.BROADCAST_SERVER_FAILED)
+                addAction(ServerService.BROADCAST_SERVER_STOPPED)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
@@ -113,6 +123,7 @@ class MainActivity : AppCompatActivity() {
 
         val serviceIntent = Intent(this, ServerService::class.java).apply {
             putExtra("PORT", port)
+            putExtra(ServerService.EXTRA_SERVER_ADDRESS, ip)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
