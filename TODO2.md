@@ -186,18 +186,20 @@ Repository URL: https://github.com/syeduroojkamal/wifi-file-server
 
 ## Phase 6: GitHub settings
 
-- [ ] Add a clear repository description.
-- [ ] Add topics:
+- Status: configured for solo development. Pull-request requirements and Discussions remain disabled intentionally.
+
+- [x] Add a clear repository description.
+- [x] Add topics:
   - `android`
   - `kotlin`
   - `file-server`
   - `wifi`
   - `open-source`
-- [ ] Enable Issues.
+- [x] Enable Issues.
 - [ ] Enable Discussions only if needed.
-- [ ] Enable Dependabot.
-- [ ] Enable secret scanning and push protection if available.
-- [ ] Protect the `main` branch after CI is working.
+- [x] Enable Dependabot version-update configuration and security updates.
+- [x] Enable vulnerability alerts, secret scanning, and push protection.
+- [x] Protect the `master` branch against force-pushes and deletion.
 - [ ] Require pull requests for future changes if collaborating with others.
 
 ## Phase 7: Initial release
