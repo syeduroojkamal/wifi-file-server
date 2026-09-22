@@ -116,6 +116,17 @@ The second command produces no output.
 
 ## Phase 4: GitHub repository configuration
 
+The tag-triggered signed APK release workflow has been added at `.github/workflows/release.yml`.
+
+Before triggering it, configure the following GitHub Actions secrets:
+
+```text
+ANDROID_KEYSTORE_BASE64
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_ALIAS
+ANDROID_KEY_PASSWORD
+```
+
 Add GitHub project configuration:
 
 ```text
