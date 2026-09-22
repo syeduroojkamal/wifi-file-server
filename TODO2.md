@@ -40,7 +40,7 @@ Signing credentials must never be committed to GitHub.
 
 ## Phase 2: Placeholder open-source documentation
 
-Create the following files:
+The following files have been added:
 
 ```text
 README.md
@@ -50,12 +50,11 @@ SECURITY.md
 CHANGELOG.md
 ```
 
-The initial `README.md` should include:
+The initial `README.md` includes:
 
 - Project name and purpose.
 - Current project status.
-- Basic installation instructions.
-- Build instructions.
+- Basic installation and build instructions.
 - How to start the Wi-Fi server.
 - How another device connects.
 - Supported Android versions.
@@ -63,9 +62,9 @@ The initial `README.md` should include:
 - Known limitations.
 - A warning that authentication and stronger storage restrictions are not implemented yet.
 
-`SECURITY.md` should explain how to report vulnerabilities and state that the current version uses local HTTP file sharing without the future authentication model.
+`SECURITY.md` explains how to report vulnerabilities and states that the current version uses local HTTP file sharing without the future authentication model.
 
-`CHANGELOG.md` can begin with:
+`CHANGELOG.md` begins with:
 
 ```text
 ## Unreleased
@@ -77,7 +76,7 @@ The initial `README.md` should include:
 
 ### License choice
 
-Use the Apache License 2.0 as the initial license unless a different choice is made before the first public release.
+The project uses the Apache License 2.0 as its initial license.
 
 | License | Main characteristic |
 |---|---|
