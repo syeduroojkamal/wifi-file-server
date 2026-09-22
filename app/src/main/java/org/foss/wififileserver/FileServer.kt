@@ -31,11 +31,11 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
         ThreadPoolExecutor.DiscardPolicy()
     )
     private val zipJobs = ConcurrentHashMap<String, ZipJob>()
+    private val zipJobTimeoutMs = TimeUnit.MINUTES.toMillis(10)
 
     override fun stop() {
+        cancelAllZipJobs()
         zipExecutor.shutdownNow()
-        zipJobs.forEach { (_, job) -> job.zipFile?.delete() }
-        zipJobs.clear()
         super.stop()
     }
 
@@ -49,6 +49,7 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
                 uri == "/api/download" -> handleDownload(session)
                 uri == "/api/zip" && session.method == Method.POST -> handleStartZip(session)
                 uri == "/api/zip-progress" -> handleZipProgress(session)
+                uri == "/api/zip-cancel" && session.method == Method.POST -> handleCancelZip(session)
                 uri == "/api/upload" && session.method == Method.POST -> handleUpload(session)
                 uri == "/api/create-folder" && session.method == Method.POST -> handleCreateFolder(session)
                 uri == "/api/delete" && session.method == Method.POST -> handleDelete(session)
@@ -315,13 +316,24 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
         zipExecutor.execute {
             val zipFile = File.createTempFile("download-", ".zip", context.cacheDir)
             try {
-                createZip(sourceDir, zipFile, job)
+                job.zipFile = zipFile
+                if (job.state == "cancelled") {
+                    zipFile.delete()
+                    return@execute
+                }
+                createZip(safeSourceDir, zipFile, job)
+                if (job.state == "cancelled") {
+                    zipFile.delete()
+                    return@execute
+                }
                 job.zipFile = zipFile
                 job.state = "complete"
             } catch (e: Exception) {
                 zipFile.delete()
-                job.error = e.message ?: "ZIP creation failed"
-                job.state = "failed"
+                if (job.state != "cancelled") {
+                    job.error = e.message ?: "ZIP creation failed"
+                    job.state = "failed"
+                }
             }
         }
 
@@ -331,9 +343,25 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
     }
 
     private fun pruneExpiredZipJobs() {
-        val cutoff = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10)
+        val cutoff = System.currentTimeMillis() - zipJobTimeoutMs
         zipJobs.entries.removeIf { (_, job) ->
-            job.createdAt < cutoff && job.state == "compressing"
+            if (job.createdAt < cutoff && job.state == "compressing") {
+                job.state = "expired"
+                job.error = "ZIP job expired"
+                job.zipFile?.delete()
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun cancelAllZipJobs() {
+        zipJobs.entries.removeIf { (_, job) ->
+            job.state = "cancelled"
+            job.error = "ZIP job cancelled"
+            job.zipFile?.delete()
+            true
         }
     }
 
@@ -349,6 +377,17 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             .put("totalBytes", job.totalBytes)
         job.error?.let { result.put("error", it) }
         return newFixedLengthResponse(Response.Status.OK, "application/json", result.toString())
+    }
+
+    private fun handleCancelZip(session: IHTTPSession): Response {
+        val jobId = session.parameters["job"]?.firstOrNull()
+            ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing job")
+        val job = zipJobs[jobId] ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "ZIP job not found")
+        job.state = "cancelled"
+        job.error = "ZIP job cancelled"
+        job.zipFile?.delete()
+        zipJobs.remove(jobId)
+        return newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "Cancelled")
     }
 
     private fun createZip(sourceDir: File, zipFile: File, job: ZipJob) {
