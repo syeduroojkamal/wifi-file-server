@@ -4,9 +4,6 @@ Ordered from most urgent to least urgent.
 
 ## Critical: security and production blockers
 
-- [ ] **Bundle Tailwind CSS locally**
-  - Replace the Tailwind CDN script in `app/src/main/assets/web/index.html` with a production-generated static stylesheet bundled in the APK.
-
 <!--- [ ] **Add authentication**
   - Protect directory listing, upload, download, move, duplicate, delete, and ZIP endpoints with a password, access token, or pairing flow.
 
