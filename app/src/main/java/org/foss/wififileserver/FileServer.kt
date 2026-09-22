@@ -13,15 +13,31 @@ import java.io.InputStream
 import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(port) {
 
     private val rootDir: File = Environment.getExternalStorageDirectory()
-    private val zipExecutor = Executors.newCachedThreadPool()
+    private val zipExecutor = ThreadPoolExecutor(
+        1,
+        1,
+        30L,
+        TimeUnit.SECONDS,
+        LinkedBlockingQueue(4),
+        ThreadPoolExecutor.DiscardPolicy()
+    )
     private val zipJobs = ConcurrentHashMap<String, ZipJob>()
+
+    override fun stop() {
+        zipExecutor.shutdownNow()
+        zipJobs.forEach { (_, job) -> job.zipFile?.delete() }
+        zipJobs.clear()
+        super.stop()
+    }
 
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri
@@ -309,8 +325,16 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
             }
         }
 
+        pruneExpiredZipJobs()
         val result = JSONObject().put("jobId", jobId)
         return newFixedLengthResponse(Response.Status.OK, "application/json", result.toString())
+    }
+
+    private fun pruneExpiredZipJobs() {
+        val cutoff = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10)
+        zipJobs.entries.removeIf { (_, job) ->
+            job.createdAt < cutoff && job.state == "compressing"
+        }
     }
 
     private fun handleZipProgress(session: IHTTPSession): Response {
@@ -334,14 +358,15 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
     }
 
     private fun addToZip(file: File, entryPath: String, output: ZipOutputStream, job: ZipJob) {
+        val safeEntryPath = sanitizeZipEntryPath(entryPath)
         if (file.isDirectory) {
-            output.putNextEntry(ZipEntry("$entryPath/"))
+            output.putNextEntry(ZipEntry("${safeEntryPath}/"))
             output.closeEntry()
             file.listFiles()?.forEach { child ->
                 addToZip(child, "$entryPath/${child.name}", output, job)
             }
         } else {
-            output.putNextEntry(ZipEntry(entryPath))
+            output.putNextEntry(ZipEntry(safeEntryPath))
             FileInputStream(file).use { input ->
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                 var count = input.read(buffer)
@@ -370,7 +395,8 @@ class FileServer(private val context: Context, port: Int = 8080) : NanoHTTPD(por
         @Volatile var processedBytes: Long = 0,
         @Volatile var progress: Int = 0,
         @Volatile var zipFile: File? = null,
-        @Volatile var error: String? = null
+        @Volatile var error: String? = null,
+        @Volatile var createdAt: Long = System.currentTimeMillis()
     )
 
     private fun handleUpload(session: IHTTPSession): Response {
