@@ -86,8 +86,10 @@ The project uses the Apache License 2.0 as its initial license.
 
 ## Phase 3: Repository hygiene
 
-- [ ] Review `.gitignore`.
-- [ ] Ensure these are ignored:
+Status: complete. The ignore rules were verified, and no signing secrets or generated build artifacts are tracked.
+
+- [x] Review `.gitignore`.
+- [x] Ensure these are ignored:
 
   ```text
   local.properties
@@ -99,9 +101,9 @@ The project uses the Apache License 2.0 as its initial license.
   .idea/
   ```
 
-- [ ] Confirm no secrets or private machine configuration are tracked.
-- [ ] Do not commit generated APKs; attach them to GitHub Releases instead.
-- [ ] Keep source files and Gradle wrapper files in the repository.
+- [x] Confirm no secrets or private machine configuration are tracked.
+- [x] Do not commit generated APKs; attach them to GitHub Releases instead.
+- [x] Keep source files and Gradle wrapper files in the repository.
 
 Check before pushing:
 
@@ -110,7 +112,7 @@ git status
 git ls-files | grep -E 'local.properties|key.properties|\.jks$|\.keystore$'
 ```
 
-The second command should produce no output.
+The second command produces no output.
 
 ## Phase 4: GitHub repository configuration
 
