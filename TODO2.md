@@ -159,29 +159,30 @@ Do not put release signing credentials in the repository. Signing can later be a
 
 ## Phase 5: Create the GitHub repository
 
-- [ ] Create an empty GitHub repository.
-- [ ] Use a name such as `wifi-file-server`.
-- [ ] Set the visibility to public if the project should be openly available.
-- [ ] Do not create an additional README, license, or `.gitignore` from GitHub.
-- [ ] Add the remote:
+- [x] Create the GitHub repository.
+- [x] Use the name `wifi-file-server`.
+- [x] Set the repository to public.
+- [x] Do not create an additional README, license, or `.gitignore` from GitHub.
+- [x] Add the remote:
 
   ```bash
-  git remote add origin https://github.com/YOUR_USERNAME/wifi-file-server.git
+  git remote add origin https://github.com/syeduroojkamal/wifi-file-server.git
   ```
 
-- [ ] Commit the project:
+- [x] Commit the project:
 
   ```bash
   git add .
-  git commit -m "Prepare initial open-source release"
+  git commit -m "Initial open-source release preparation"
   ```
 
-- [ ] Push the main branch:
+- [x] Push the source branch:
 
   ```bash
-  git branch -M main
-  git push -u origin main
+  git push -u origin master
   ```
+
+Repository URL: https://github.com/syeduroojkamal/wifi-file-server
 
 ## Phase 6: GitHub settings
 
@@ -201,19 +202,18 @@ Do not put release signing credentials in the repository. Signing can later be a
 
 ## Phase 7: Initial release
 
-- [ ] Test the release APK manually.
-- [ ] Create a changelog entry.
-- [ ] Create and push a Git tag:
+- [x] Test the release APK manually.
+- [x] Create a changelog entry.
+- [x] Create and push the Git tag `v1.0.0`:
 
   ```bash
   git tag v1.0.0
   git push origin v1.0.0
   ```
 
-- [ ] Create a GitHub Release named `v1.0.0`.
-- [ ] Attach the signed APK.
-- [ ] Include installation instructions and known limitations.
-- [ ] Add a SHA-256 checksum for the APK.
+- [x] Create the GitHub Release named `v1.0.0`.
+- [x] Attach the signed APK and SHA-256 checksum.
+- [x] Include installation instructions and known limitations.
 
 ## Deferred work
 
